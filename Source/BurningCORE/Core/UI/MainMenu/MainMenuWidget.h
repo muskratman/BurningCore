@@ -6,27 +6,35 @@
 
 class UComboBoxString;
 class UButton;
+class UTextBlock;
 
 /**
- * Widget for the Main Menu. Displays available levels and allows the player to start the game.
+ * Widget for the Main Menu. Programmatically builds UI with level selection and start button.
  */
-UCLASS(Abstract)
+UCLASS()
 class BURNINGCORE_API UMainMenuWidget : public UUserWidget
 {
 	GENERATED_BODY()
 
 protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeConstruct() override;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UComboBoxString> LevelComboBox;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UButton> StartGameButton;
 
 	UFUNCTION()
 	void OnStartGameClicked();
 
 private:
 	void PopulateLevels();
+
+	UPROPERTY()
+	TObjectPtr<UComboBoxString> LevelComboBox;
+
+	UPROPERTY()
+	TObjectPtr<UButton> StartGameButton;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> TitleText;
+
+	UPROPERTY()
+	TObjectPtr<UTextBlock> StartButtonText;
 };

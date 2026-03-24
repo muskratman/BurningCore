@@ -22,7 +22,8 @@ public class BurningCORE : ModuleRules
 			"GameplayAbilities",
 			"GameplayTags",
 			"GameplayTasks",
-			"Niagara"
+			"Niagara",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -41,7 +42,8 @@ public class BurningCORE : ModuleRules
 			"BurningCORE/Variant_SideScrolling/AI",
 			"BurningCORE/Variant_SideScrolling/Gameplay",
 			"BurningCORE/Variant_SideScrolling/Interfaces",
-			"BurningCORE/Variant_SideScrolling/UI"
+			"BurningCORE/Variant_SideScrolling/UI",
+			"BurningCORE/Core/UI/MainMenu"
 		});
 
 		// Uncomment if you are using Slate UI

@@ -7,7 +7,7 @@
 /**
  * GameMode for the Main Menu. Connects the MainMenuPlayerController and MainMenuHUD.
  */
-UCLASS(Abstract)
+UCLASS()
 class BURNINGCORE_API AMainMenuGameMode : public AGameModeBase
 {
 	GENERATED_BODY()

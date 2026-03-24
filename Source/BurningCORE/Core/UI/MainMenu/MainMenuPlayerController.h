@@ -7,7 +7,7 @@
 /**
  * Player controller for the Main Menu. Enables UI interaction.
  */
-UCLASS(Abstract)
+UCLASS()
 class BURNINGCORE_API AMainMenuPlayerController : public APlayerController
 {
 	GENERATED_BODY()
