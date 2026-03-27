@@ -4,8 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
 #include "DragonFormDataAsset.generated.h"
-
-class ADragonProjectile;
+class ABaseProjectile;
 class UGameplayEffect;
 class UMaterialInterface;
 class UNiagaraSystem;
@@ -27,10 +26,10 @@ public:
 	FText DisplayName;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
-	TSubclassOf<ADragonProjectile> ProjectileClass;
+	TSubclassOf<ABaseProjectile> ProjectileClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
-	TSubclassOf<ADragonProjectile> ChargeProjectileClass;
+	TSubclassOf<ABaseProjectile> ChargeProjectileClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
 	TSubclassOf<UGameplayEffect> OnHitStatusEffect;
@@ -42,7 +41,7 @@ public:
 	int32 StatusThreshold = 3;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Overdrive")
-	TSubclassOf<ADragonProjectile> OverdriveProjectileClass;
+	TSubclassOf<ABaseProjectile> OverdriveProjectileClass;
     
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Overdrive")
 	float OverdriveDamageMultiplier = 1.5f;

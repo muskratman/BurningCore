@@ -20,8 +20,6 @@ public:
 	UGA_DragonChargeShot();
 
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
-	virtual void InputReleased(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) override;
-	virtual void CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility) override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Damage")
@@ -29,9 +27,4 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> ChargeLoopMontage;
-
-	bool bIsCharging = false;
-	float ChargeStartTime = 0.0f;
-
-	void FireChargeShot();
 };

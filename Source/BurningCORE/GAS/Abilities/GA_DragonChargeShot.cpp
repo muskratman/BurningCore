@@ -2,7 +2,7 @@
 #include "Character/DragonCharacter.h"
 #include "Character/DragonFormComponent.h"
 #include "Data/DragonFormDataAsset.h"
-#include "Combat/DragonProjectile.h"
+#include "Projectiles/BaseProjectile.h"
 #include "AbilitySystemComponent.h"
 #include "BurningCORE.h"
 
@@ -21,68 +21,38 @@ void UGA_DragonChargeShot::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		return;
 	}
 
-	bIsCharging = true;
-	ChargeStartTime = GetWorld()->GetTimeSeconds();
-
-	// In full implementation, play ChargeLoopMontage here using WaitDelay/WaitInputRelease tasks
-}
-
-void UGA_DragonChargeShot::InputReleased(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo)
-{
-	if (bIsCharging)
-	{
-		FireChargeShot();
-	}
-
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
-}
-
-void UGA_DragonChargeShot::CancelAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateCancelAbility)
-{
-	bIsCharging = false;
-	Super::CancelAbility(Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility);
-}
-
-void UGA_DragonChargeShot::FireChargeShot()
-{
-	bIsCharging = false;
-	float HoldDuration = GetWorld()->GetTimeSeconds() - ChargeStartTime;
-
-	ADragonCharacter* Character = Cast<ADragonCharacter>(GetActorInfo().AvatarActor.Get());
+	ADragonCharacter* Character = Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get());
 	if (Character && Character->GetFormComponent())
 	{
 		const UDragonFormDataAsset* FormData = Character->GetFormComponent()->GetActiveFormData();
-		if (FormData && HoldDuration >= FormData->ChargeTime)
+		if (FormData && FormData->ChargeProjectileClass)
 		{
-			// Full charge reached
-			if (FormData->ChargeProjectileClass && ChargeDamageEffectClass)
+			FVector SpawnLoc = Character->GetActorLocation() + Character->GetActorForwardVector() * 100.0f;
+			FRotator SpawnRot = Character->GetActorRotation();
+
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.Instigator = Character;
+			SpawnParams.Owner = Character;
+
+			ABaseProjectile* Projectile = GetWorld()->SpawnActor<ABaseProjectile>(FormData->ChargeProjectileClass, SpawnLoc, SpawnRot, SpawnParams);
+			
+			if (Projectile)
 			{
-				FVector SpawnLoc = Character->GetActorLocation() + Character->GetActorForwardVector() * 100.0f;
-				FRotator SpawnRot = Character->GetActorRotation();
+				FGameplayEffectContextHandle ContextHandle = Character->GetAbilitySystemComponent()->MakeEffectContext();
+				ContextHandle.AddInstigator(Character, Character);
 
-				FActorSpawnParameters SpawnParams;
-				SpawnParams.Instigator = Character;
-				SpawnParams.Owner = Character;
-
-				ADragonProjectile* Projectile = GetWorld()->SpawnActor<ADragonProjectile>(FormData->ChargeProjectileClass, SpawnLoc, SpawnRot, SpawnParams);
-				
-				if (Projectile)
+				if (ChargeDamageEffectClass)
 				{
-					FGameplayEffectContextHandle ContextHandle = Character->GetAbilitySystemComponent()->MakeEffectContext();
-					ContextHandle.AddInstigator(Character, Character);
-
 					Projectile->DamageEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(ChargeDamageEffectClass, GetAbilityLevel(), ContextHandle);
-					
-					if (FormData->OnHitStatusEffect)
-					{
-						Projectile->StatusEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(FormData->OnHitStatusEffect, GetAbilityLevel(), ContextHandle);
-					}
+				}
+				
+				if (FormData->OnHitStatusEffect)
+				{
+					Projectile->StatusEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(FormData->OnHitStatusEffect, GetAbilityLevel(), ContextHandle);
 				}
 			}
 		}
-		else
-		{
-			UE_LOG(LogDragon, Verbose, TEXT("Charge released too early: %f < %f"), HoldDuration, FormData ? FormData->ChargeTime : 0.0f);
-		}
 	}
+
+	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }

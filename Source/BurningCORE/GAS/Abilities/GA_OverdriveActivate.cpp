@@ -4,7 +4,7 @@
 
 UGA_OverdriveActivate::UGA_OverdriveActivate()
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::NonInstanced;
+	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 	// SetAssetTags(FGameplayTagContainer(FGameplayTag::RequestGameplayTag(FName("Ability.Overdrive.Activate"))));
 	
 	// Can't press it if already in overdrive

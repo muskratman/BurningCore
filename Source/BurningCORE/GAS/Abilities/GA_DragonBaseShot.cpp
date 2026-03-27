@@ -3,7 +3,7 @@
 #include "Character/DragonFormComponent.h"
 #include "Character/DragonOverdriveComponent.h"
 #include "Data/DragonFormDataAsset.h"
-#include "Combat/DragonProjectile.h"
+#include "Projectiles/BaseProjectile.h"
 #include "AbilitySystemComponent.h"
 #include "BurningCORE.h"
 
@@ -22,14 +22,14 @@ void UGA_DragonBaseShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	}
 
 	ADragonCharacter* Character = Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get());
-	if (Character && Character->GetFormComponent() && BaseDamageEffectClass)
+	if (Character && Character->GetFormComponent())
 	{
 		const UDragonFormDataAsset* FormData = Character->GetFormComponent()->GetActiveFormData();
 		if (FormData)
 		{
 			bool bOverdrive = Character->GetOverdriveComponent() && Character->GetOverdriveComponent()->IsOverdriveActive();
 			
-			TSubclassOf<ADragonProjectile> ProjClass = FormData->ProjectileClass;
+			TSubclassOf<ABaseProjectile> ProjClass = FormData->ProjectileClass;
 			if (bOverdrive && FormData->OverdriveProjectileClass)
 			{
 				ProjClass = FormData->OverdriveProjectileClass;
@@ -45,7 +45,7 @@ void UGA_DragonBaseShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 				SpawnParams.Instigator = Character;
 				SpawnParams.Owner = Character;
 
-				ADragonProjectile* Projectile = GetWorld()->SpawnActor<ADragonProjectile>(ProjClass, SpawnLoc, SpawnRot, SpawnParams);
+				ABaseProjectile* Projectile = GetWorld()->SpawnActor<ABaseProjectile>(ProjClass, SpawnLoc, SpawnRot, SpawnParams);
 				
 				if (Projectile)
 				{
@@ -53,14 +53,17 @@ void UGA_DragonBaseShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 					FGameplayEffectContextHandle ContextHandle = Character->GetAbilitySystemComponent()->MakeEffectContext();
 					ContextHandle.AddInstigator(Character, Character);
 
-					FGameplayEffectSpecHandle DamageSpecHandle = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(BaseDamageEffectClass, GetAbilityLevel(), ContextHandle);
-					
-					if (bOverdrive)
+					if (BaseDamageEffectClass)
 					{
-						// In full impl, modify spec damage by FormData->OverdriveDamageMultiplier
-					}
+						FGameplayEffectSpecHandle DamageSpecHandle = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(BaseDamageEffectClass, GetAbilityLevel(), ContextHandle);
+						
+						if (bOverdrive)
+						{
+							// In full impl, modify spec damage by FormData->OverdriveDamageMultiplier
+						}
 
-					Projectile->DamageEffectSpec = DamageSpecHandle;
+						Projectile->DamageEffectSpec = DamageSpecHandle;
+					}
 					
 					if (FormData->OnHitStatusEffect)
 					{
