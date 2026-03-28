@@ -37,6 +37,14 @@ public:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera", meta=(ClampMin=-100000, ClampMax=100000, Units="cm"))
 	float CameraXMaxBounds = 10000.0f;
 
+	/** How fast the camera follows the target (Lower = more lag/smoother, Higher = faster) */
+	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=100.0f))
+	float CameraInterpSpeed = 2.0f;
+
+	/** How fast the camera adjusts its height (Z axis) */
+	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=100.0f))
+	float CameraZInterpSpeed = 2.0f;
+
 protected:
 
 	/** Last cached camera vertical location. The camera only adjusts its height if necessary. */

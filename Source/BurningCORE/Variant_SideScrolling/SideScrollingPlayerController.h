@@ -46,6 +46,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<ASideScrollingCharacter> CharacterClass;
 
+	/** Input action to toggle the pause menu */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input|Input Mappings")
+	class UInputAction* TogglePauseAction;
+
 protected:
 
 	/** Gameplay initialization */
@@ -63,5 +67,9 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+private:
+	/** Handles the pause input action */
+	void OnTogglePause(const struct FInputActionValue& Value);
 
 };

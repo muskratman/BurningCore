@@ -3,6 +3,8 @@
 
 #include "SideScrollingPlayerController.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "Core/UI/BurningCORE_HUD.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
@@ -62,6 +64,14 @@ void ASideScrollingPlayerController::SetupInputComponent()
 			}
 		}
 	}
+
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		if (TogglePauseAction)
+		{
+			EnhancedInputComponent->BindAction(TogglePauseAction, ETriggerEvent::Triggered, this, &ASideScrollingPlayerController::OnTogglePause);
+		}
+	}
 }
 
 void ASideScrollingPlayerController::OnPossess(APawn* InPawn)
@@ -95,4 +105,12 @@ bool ASideScrollingPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
+}
+
+void ASideScrollingPlayerController::OnTogglePause(const FInputActionValue& Value)
+{
+	if (ABurningCORE_HUD* BurningHUD = Cast<ABurningCORE_HUD>(GetHUD()))
+	{
+		BurningHUD->TogglePauseMenu();
+	}
 }

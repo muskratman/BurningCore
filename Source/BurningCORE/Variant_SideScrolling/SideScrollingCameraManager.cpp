@@ -3,6 +3,8 @@
 
 #include "SideScrollingCameraManager.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
 #include "Engine/HitResult.h"
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
@@ -15,34 +17,44 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 	// is our target valid?
 	if (IsValid(TargetPawn))
 	{
-		// set the view target FOV and rotation
-		OutVT.POV.Rotation = FRotator(0.0f, -90.0f, 0.0f);
-		OutVT.POV.FOV = 65.0f;
+		// Default values
+		FRotator TargetRotation = FRotator(0.0f, -90.0f, 0.0f);
+		float TargetFOV = 65.0f;
+		FVector IdealCameraLocation = TargetPawn->GetActorLocation() + FVector(0.0f, CurrentZoom, CameraZOffset);
 
-		// cache the current location
-		FVector CurrentActorLocation = OutVT.Target->GetActorLocation();
+		// 1. Try to get the "Ideal" position from the Pawn's components
+		if (USpringArmComponent* SpringArm = TargetPawn->FindComponentByClass<USpringArmComponent>())
+		{
+			// The SpringArm already knows where the camera "should" be based on its settings in BP
+			IdealCameraLocation = SpringArm->GetSocketLocation(USpringArmComponent::SocketName);
+			TargetRotation = SpringArm->GetSocketRotation(USpringArmComponent::SocketName);
+		}
+		
+		if (UCameraComponent* CameraComp = TargetPawn->FindComponentByClass<UCameraComponent>())
+		{
+			TargetFOV = CameraComp->FieldOfView;
+			// If there's no SpringArm but a Camera exists, we use its relative offset as well
+			if (!TargetPawn->FindComponentByClass<USpringArmComponent>())
+			{
+				IdealCameraLocation = CameraComp->GetComponentLocation();
+				TargetRotation = CameraComp->GetComponentRotation();
+			}
+		}
 
-		// copy the current camera location
+		// 2. Set the view target FOV and rotation
+		OutVT.POV.Rotation = TargetRotation;
+		OutVT.POV.FOV = TargetFOV;
+
+		// 3. Cache the current location for interpolation
 		FVector CurrentCameraLocation = GetCameraLocation();
+		FVector CurrentActorLocation = TargetPawn->GetActorLocation();
 
-		// calculate the "zoom distance" - in reality the distance we want to keep to the target
-		float CurrentY = CurrentZoom + CurrentActorLocation.Y;
-
-		// do first-time setup
+		// 4. Do first-time setup
 		if (bSetup)
 		{
-			// lower the setup flag
 			bSetup = false;
-
-			// initialize the camera viewpoint and return
-			OutVT.POV.Location.X = CurrentActorLocation.X;
-			OutVT.POV.Location.Y = CurrentY;
-			OutVT.POV.Location.Z = CurrentActorLocation.Z + CameraZOffset;
-
-			// save the current camera height
+			OutVT.POV.Location = IdealCameraLocation;
 			CurrentZ = OutVT.POV.Location.Z;
-
-			// skip the rest of the calculations
 			return;
 		}
 
@@ -73,33 +85,33 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 		// do we need to do a height update?
 		if (bZUpdate)
 		{
-
-			// set the height goal from the actor location
-			CurrentZ = CurrentActorLocation.Z;
+			// set the height goal from the ideal camera location (respects SpringArm/Camera BP settings)
+			CurrentZ = IdealCameraLocation.Z;
 
 		} else {
 
 			// are we close enough to the target height?
-			if (FMath::IsNearlyEqual(CurrentZ, CurrentActorLocation.Z, 100.0f))
+			if (FMath::IsNearlyEqual(CurrentZ, IdealCameraLocation.Z, 100.0f))
 			{
-				// set the height goal from the actor location
-				CurrentZ = CurrentActorLocation.Z;
+				// set the height goal from the ideal camera location
+				CurrentZ = IdealCameraLocation.Z;
 
 			} else {
 
-				// blend the height towards the actor location
-				CurrentZ = FMath::FInterpTo(CurrentZ, CurrentActorLocation.Z, DeltaTime, 2.0f);
+				// blend the height towards the ideal camera location
+				CurrentZ = FMath::FInterpTo(CurrentZ, IdealCameraLocation.Z, DeltaTime, CameraZInterpSpeed);
 				
 			}
 
 		}
 
 		// clamp the X axis to the min and max camera bounds
-		float CurrentX = FMath::Clamp(CurrentActorLocation.X, CameraXMinBounds, CameraXMaxBounds);
+		float TargetX = FMath::Clamp(IdealCameraLocation.X, CameraXMinBounds, CameraXMaxBounds);
 
 		// blend towards the new camera location and update the output
-		FVector TargetCameraLocation(CurrentX, CurrentY, CurrentZ);
+		// We keep the Ideal Y (depth) from the SpringArm, but clamp X and smooth Z
+		FVector TargetCameraLocation(TargetX, IdealCameraLocation.Y, CurrentZ);
 
-		OutVT.POV.Location = FMath::VInterpTo(CurrentCameraLocation, TargetCameraLocation, DeltaTime, 2.0f);
+		OutVT.POV.Location = FMath::VInterpTo(CurrentCameraLocation, TargetCameraLocation, DeltaTime, CameraInterpSpeed);
 	}
 }

@@ -6,6 +6,12 @@
 #include "Blueprint/UserWidget.h"
 #include "SideScrollingUI.h"
 #include "SideScrollingPickup.h"
+#include "Core/UI/BurningCORE_HUD.h"
+
+ASideScrollingGameMode::ASideScrollingGameMode()
+{
+	HUDClass = ABurningCORE_HUD::StaticClass();
+}
 
 void ASideScrollingGameMode::BeginPlay()
 {

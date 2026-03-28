@@ -31,6 +31,12 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	TObjectPtr<UInputMappingContext> PlatformerMappingContext;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input")
+	class UInputAction* TogglePauseAction;
+
 	UPROPERTY(EditDefaultsOnly, Category="Input")
 	int32 MappingContextPriority = 0;
+
+private:
+	void OnTogglePause(const struct FInputActionValue& Value);
 };

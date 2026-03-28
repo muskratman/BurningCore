@@ -18,6 +18,9 @@ class ASideScrollingGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 	
+public:
+	ASideScrollingGameMode();
+
 protected:
 
 	/** Class of UI widget to spawn when the game starts */
