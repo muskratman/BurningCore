@@ -105,8 +105,25 @@ void ASideScrollingCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float De
 
 		}
 
-		// clamp the X axis to the min and max camera bounds
-		float TargetX = FMath::Clamp(IdealCameraLocation.X, CameraXMinBounds, CameraXMaxBounds);
+		// 5. Calculate look-ahead horizontal offset
+		float FacingDir = TargetPawn->GetActorForwardVector().X;
+		float TargetHorizontalOffset = 0.0f;
+
+		// If facing a clear direction, set the target offset
+		if (FMath::Abs(FacingDir) > 0.1f)
+		{
+			TargetHorizontalOffset = (FacingDir > 0.0f) ? HorizontalOffset : -HorizontalOffset;
+		}
+		else
+		{
+			// If no clear direction, keep the current offset to avoid snapping to center
+			TargetHorizontalOffset = CurrentHorizontalOffset;
+		}
+
+		CurrentHorizontalOffset = FMath::FInterpTo(CurrentHorizontalOffset, TargetHorizontalOffset, DeltaTime, HorizontalOffsetInterpSpeed);
+
+		// clamp the X axis to the min and max camera bounds, including the look-ahead offset
+		float TargetX = FMath::Clamp(IdealCameraLocation.X + CurrentHorizontalOffset, CameraXMinBounds, CameraXMaxBounds);
 
 		// blend towards the new camera location and update the output
 		// We keep the Ideal Y (depth) from the SpringArm, but clamp X and smooth Z

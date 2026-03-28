@@ -45,10 +45,21 @@ public:
 	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=100.0f))
 	float CameraZInterpSpeed = 2.0f;
 
+	/** How much the camera is offset from the character based on facing direction (look-ahead) */
+	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=1000.0f))
+	float HorizontalOffset = 500.0f;
+
+	/** How fast the camera shifts horizontally when the character changes direction */
+	UPROPERTY(EditAnywhere, Category="Side Scrolling Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=100.0f))
+	float HorizontalOffsetInterpSpeed = 2.0f;
+
 protected:
 
 	/** Last cached camera vertical location. The camera only adjusts its height if necessary. */
 	float CurrentZ = 0.0f;
+
+	/** Current interpolated horizontal offset for look-ahead functionality */
+	float CurrentHorizontalOffset = 0.0f;
 
 	/** First-time update camera setup flag */
 	bool bSetup = true;
