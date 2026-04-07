@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Platformer/Environment/PlatformerComponentTransformOverride.h"
 #include "PlatformerWallTurret.generated.h"
 
 class APlatformerHazardProjectile;
@@ -33,10 +34,19 @@ protected:
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> TurretMeshLayoutRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UStaticMeshComponent> TurretMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> MuzzlePointLayoutRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UArrowComponent> MuzzlePoint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> ActivationVolumeLayoutRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> ActivationVolume;
@@ -73,6 +83,15 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Turret|Behaviour", meta=(Units="cm"))
 	float MuzzleOffset = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Turret|Components")
+	FPlatformerComponentTransformOffset TurretMeshTransformOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Turret|Components")
+	FPlatformerComponentTransformOffset MuzzlePointTransformOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Turret|Components")
+	FPlatformerComponentTransformOffset ActivationVolumeTransformOffset;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Editor|Palette")
 	TSoftObjectPtr<UTexture2D> PaletteIcon;

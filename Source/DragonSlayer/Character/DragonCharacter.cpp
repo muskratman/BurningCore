@@ -11,3 +11,8 @@ ADragonCharacter::ADragonCharacter(const FObjectInitializer& ObjectInitializer)
 	FormComponent = CreateDefaultSubobject<UDragonFormComponent>(TEXT("FormComponent"));
 	OverdriveComponent = CreateDefaultSubobject<UDragonOverdriveComponent>(TEXT("OverdriveComponent"));
 }
+
+UDragonAttributeSet* ADragonCharacter::GetDragonAttributeSet() const
+{
+	return Cast<UDragonAttributeSet>(AttributeSet);
+}

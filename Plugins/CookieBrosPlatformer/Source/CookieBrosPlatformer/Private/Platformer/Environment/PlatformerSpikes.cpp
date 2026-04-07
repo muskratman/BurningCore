@@ -14,9 +14,15 @@ APlatformerSpikes::APlatformerSpikes()
 
 	RootComponent = Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
+	MeshLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("MeshLayoutRoot"));
+	MeshLayoutRoot->SetupAttachment(Root);
+
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	Mesh->SetupAttachment(Root);
-	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetupAttachment(MeshLayoutRoot);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	Mesh->SetCollisionObjectType(ECC_WorldStatic);
+	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
+	Mesh->SetCanEverAffectNavigation(false);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (CubeMesh.Succeeded())
@@ -24,8 +30,11 @@ APlatformerSpikes::APlatformerSpikes()
 		Mesh->SetStaticMesh(CubeMesh.Object);
 	}
 
+	DamageVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DamageVolumeLayoutRoot"));
+	DamageVolumeLayoutRoot->SetupAttachment(Root);
+
 	DamageVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("DamageVolume"));
-	DamageVolume->SetupAttachment(Root);
+	DamageVolume->SetupAttachment(DamageVolumeLayoutRoot);
 	DamageVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DamageVolume->SetCollisionObjectType(ECC_WorldDynamic);
 	DamageVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -33,6 +42,11 @@ APlatformerSpikes::APlatformerSpikes()
 
 	DamageVolume->OnComponentBeginOverlap.AddDynamic(this, &APlatformerSpikes::OnDamageVolumeBeginOverlap);
 	DamageVolume->OnComponentEndOverlap.AddDynamic(this, &APlatformerSpikes::OnDamageVolumeEndOverlap);
+}
+
+void APlatformerSpikes::SetSpikeSize(const FVector& InSpikeSize)
+{
+	SpikeSize = InSpikeSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
 }
 
 void APlatformerSpikes::OnConstruction(const FTransform& Transform)
@@ -44,11 +58,20 @@ void APlatformerSpikes::OnConstruction(const FTransform& Transform)
 		FMath::Max(SpikeSize.Y, 1.0f) / 100.0f,
 		FMath::Max(SpikeSize.Z, 1.0f) / 100.0f);
 
-	Mesh->SetRelativeLocation(FVector(0.0f, 0.0f, SpikeSize.Z * 0.5f));
-	Mesh->SetRelativeScale3D(MeshScale);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		MeshLayoutRoot,
+		FVector(0.0f, 0.0f, SpikeSize.Z * 0.5f),
+		FRotator::ZeroRotator,
+		MeshScale,
+		MeshTransformOffset);
 
-	DamageVolume->SetRelativeLocation(FVector(0.0f, 0.0f, SpikeSize.Z * 0.5f));
 	DamageVolume->SetBoxExtent(SpikeSize * 0.5f);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		DamageVolumeLayoutRoot,
+		FVector(0.0f, 0.0f, SpikeSize.Z * 0.5f),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		DamageVolumeTransformOffset);
 }
 
 void APlatformerSpikes::Tick(float DeltaTime)

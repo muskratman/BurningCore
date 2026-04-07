@@ -21,6 +21,12 @@ class COOKIEBROSPLATFORMER_API ABaseProjectile : public AActor
 public:
 	ABaseProjectile();
 
+	UFUNCTION(BlueprintCallable, Category="Developer")
+	void ApplyDeveloperProjectileSpeed(float DeveloperProjectileSpeed);
+
+	UFUNCTION(BlueprintPure, Category="Developer")
+	float GetDeveloperProjectileSpeed() const { return Speed; }
+
 protected:
 	virtual void BeginPlay() override;
 

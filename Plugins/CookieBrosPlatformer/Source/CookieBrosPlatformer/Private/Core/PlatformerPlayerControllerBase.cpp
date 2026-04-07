@@ -64,7 +64,7 @@ void APlatformerPlayerControllerBase::SetupInputComponent()
 	{
 		if (TogglePauseAction)
 		{
-			EnhancedInputComponent->BindAction(TogglePauseAction, ETriggerEvent::Triggered, this, &APlatformerPlayerControllerBase::OnTogglePause);
+			EnhancedInputComponent->BindAction(TogglePauseAction, ETriggerEvent::Started, this, &APlatformerPlayerControllerBase::OnTogglePause);
 		}
 	}
 }

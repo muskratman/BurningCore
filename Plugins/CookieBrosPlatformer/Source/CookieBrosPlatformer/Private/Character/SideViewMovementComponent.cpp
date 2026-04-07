@@ -12,6 +12,9 @@ USideViewMovementComponent::USideViewMovementComponent()
 	FallingLateralFriction = 3.0f;
 
 	TargetDepthY = LockedDepthY;
+	DefaultGravityScale = GravityScale;
+	bHasExternalGravityScaleOverride = false;
+	ExternalGravityScaleOverride = GravityScale;
 }
 
 void USideViewMovementComponent::InitializeComponent()
@@ -19,6 +22,7 @@ void USideViewMovementComponent::InitializeComponent()
 	Super::InitializeComponent();
 	TargetDepthY = LockedDepthY;
 	SetPlaneConstraintOrigin(FVector(0.f, LockedDepthY, 0.f));
+	DefaultGravityScale = GravityScale;
 }
 
 void USideViewMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -27,15 +31,18 @@ void USideViewMovementComponent::TickComponent(float DeltaTime, ELevelTick TickT
 
 	EnforceDepthLock(DeltaTime);
 
+	float DesiredGravityScale = DefaultGravityScale;
 	if (IsFalling() && Velocity.Z > -100.f && Velocity.Z < 100.f)
 	{
-		// Apply JumpApexGravityMultiplier logic theoretically
-		GravityScale = JumpApexGravityMultiplier;
+		DesiredGravityScale = DefaultGravityScale * JumpApexGravityMultiplier;
 	}
-	else
+
+	if (bHasExternalGravityScaleOverride)
 	{
-		GravityScale = 1.0f; // Reset normally
+		DesiredGravityScale = ExternalGravityScaleOverride;
 	}
+
+	GravityScale = DesiredGravityScale;
 }
 
 void USideViewMovementComponent::PhysCustom(float DeltaTime, int32 Iterations)
@@ -48,6 +55,30 @@ void USideViewMovementComponent::SetDepthLane(float NewY, float TransitionTime)
 	TargetDepthY = NewY;
 	LockedDepthY = TargetDepthY;
 	SetPlaneConstraintOrigin(FVector(0.f, LockedDepthY, 0.f));
+}
+
+void USideViewMovementComponent::SetExternalGravityScaleOverride(float NewGravityScale)
+{
+	bHasExternalGravityScaleOverride = true;
+	ExternalGravityScaleOverride = FMath::Max(NewGravityScale, 0.0f);
+	GravityScale = ExternalGravityScaleOverride;
+}
+
+void USideViewMovementComponent::ClearExternalGravityScaleOverride()
+{
+	bHasExternalGravityScaleOverride = false;
+	ExternalGravityScaleOverride = DefaultGravityScale;
+	GravityScale = DefaultGravityScale;
+}
+
+void USideViewMovementComponent::SetBaseGravityScale(float NewGravityScale)
+{
+	DefaultGravityScale = FMath::Max(NewGravityScale, 0.0f);
+
+	if (!bHasExternalGravityScaleOverride)
+	{
+		GravityScale = DefaultGravityScale;
+	}
 }
 
 void USideViewMovementComponent::EnforceDepthLock(float DeltaTime)

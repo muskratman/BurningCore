@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "Platformer/Environment/PlatformerHazardProjectile.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
@@ -16,8 +17,11 @@ APlatformerWallTurret::APlatformerWallTurret()
 
 	RootComponent = Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
+	TurretMeshLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TurretMeshLayoutRoot"));
+	TurretMeshLayoutRoot->SetupAttachment(Root);
+
 	TurretMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TurretMesh"));
-	TurretMesh->SetupAttachment(Root);
+	TurretMesh->SetupAttachment(TurretMeshLayoutRoot);
 	TurretMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	TurretMesh->SetCollisionObjectType(ECC_WorldStatic);
 	TurretMesh->SetCollisionResponseToAllChannels(ECR_Block);
@@ -28,11 +32,17 @@ APlatformerWallTurret::APlatformerWallTurret()
 		TurretMesh->SetStaticMesh(CubeMesh.Object);
 	}
 
+	MuzzlePointLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("MuzzlePointLayoutRoot"));
+	MuzzlePointLayoutRoot->SetupAttachment(Root);
+
 	MuzzlePoint = CreateDefaultSubobject<UArrowComponent>(TEXT("MuzzlePoint"));
-	MuzzlePoint->SetupAttachment(Root);
+	MuzzlePoint->SetupAttachment(MuzzlePointLayoutRoot);
+
+	ActivationVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ActivationVolumeLayoutRoot"));
+	ActivationVolumeLayoutRoot->SetupAttachment(Root);
 
 	ActivationVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ActivationVolume"));
-	ActivationVolume->SetupAttachment(Root);
+	ActivationVolume->SetupAttachment(ActivationVolumeLayoutRoot);
 	ActivationVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	ActivationVolume->SetCollisionObjectType(ECC_WorldDynamic);
 	ActivationVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -56,12 +66,28 @@ void APlatformerWallTurret::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	TurretMesh->SetRelativeLocation(FVector(0.0f, 0.0f, 50.0f));
-	TurretMesh->SetRelativeScale3D(FVector(0.8f, 0.8f, 1.0f));
+	PlatformerEnvironment::ApplyRelativeTransform(
+		TurretMeshLayoutRoot,
+		FVector(0.0f, 0.0f, 50.0f),
+		FRotator::ZeroRotator,
+		FVector(0.8f, 0.8f, 1.0f),
+		TurretMeshTransformOffset);
 
-	MuzzlePoint->SetRelativeLocation(FVector(MuzzleOffset, 0.0f, 50.0f));
 	ActivationVolume->SetBoxExtent(ActivationExtent);
-	ActivationVolume->SetRelativeLocation(FVector(ActivationExtent.X, 0.0f, 50.0f));
+
+	PlatformerEnvironment::ApplyRelativeTransform(
+		MuzzlePointLayoutRoot,
+		FVector(-MuzzleOffset, 0.0f, 50.0f),
+		FRotator(0.0f, 180.0f, 0.0f),
+		FVector::OneVector,
+		MuzzlePointTransformOffset);
+
+	PlatformerEnvironment::ApplyRelativeTransform(
+		ActivationVolumeLayoutRoot,
+		FVector(-ActivationExtent.X, 0.0f, 50.0f),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		ActivationVolumeTransformOffset);
 }
 
 void APlatformerWallTurret::OnActivationVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

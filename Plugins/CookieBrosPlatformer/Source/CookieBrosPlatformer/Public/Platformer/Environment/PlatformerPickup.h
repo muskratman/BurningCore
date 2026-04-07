@@ -7,6 +7,7 @@
 #include "PlatformerPickup.generated.h"
 
 class USphereComponent;
+class UStaticMeshComponent;
 class UTexture2D;
 
 /**
@@ -21,6 +22,9 @@ class COOKIEBROSPLATFORMER_API APlatformerPickup : public AActor
 	/** Pickup bounding sphere */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<USphereComponent> Sphere;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UStaticMeshComponent> PickupMesh;
 
 public:
 	APlatformerPickup();

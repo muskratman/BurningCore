@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -14,8 +15,11 @@ APlatformerVanishingBlock::APlatformerVanishingBlock()
 
 	RootComponent = Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
+	BlockMeshLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("BlockMeshLayoutRoot"));
+	BlockMeshLayoutRoot->SetupAttachment(Root);
+
 	BlockMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BlockMesh"));
-	BlockMesh->SetupAttachment(Root);
+	BlockMesh->SetupAttachment(BlockMeshLayoutRoot);
 	BlockMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	BlockMesh->SetCollisionObjectType(ECC_WorldStatic);
 	BlockMesh->SetCollisionResponseToAllChannels(ECR_Block);
@@ -26,8 +30,11 @@ APlatformerVanishingBlock::APlatformerVanishingBlock()
 		BlockMesh->SetStaticMesh(CubeMesh.Object);
 	}
 
+	TriggerVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TriggerVolumeLayoutRoot"));
+	TriggerVolumeLayoutRoot->SetupAttachment(Root);
+
 	TriggerVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerVolume"));
-	TriggerVolume->SetupAttachment(Root);
+	TriggerVolume->SetupAttachment(TriggerVolumeLayoutRoot);
 	TriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	TriggerVolume->SetCollisionObjectType(ECC_WorldDynamic);
 	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -74,11 +81,20 @@ void APlatformerVanishingBlock::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	BlockMesh->SetRelativeLocation(FVector(0.0f, 0.0f, BlockSize.Z * 0.5f));
-	BlockMesh->SetRelativeScale3D(BlockSize / 100.0f);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		BlockMeshLayoutRoot,
+		FVector(0.0f, 0.0f, BlockSize.Z * 0.5f),
+		FRotator::ZeroRotator,
+		BlockSize / 100.0f,
+		BlockMeshTransformOffset);
 
-	TriggerVolume->SetRelativeLocation(FVector(0.0f, 0.0f, BlockSize.Z + 16.0f));
 	TriggerVolume->SetBoxExtent(FVector(BlockSize.X * 0.45f, BlockSize.Y * 0.45f, 24.0f));
+	PlatformerEnvironment::ApplyRelativeTransform(
+		TriggerVolumeLayoutRoot,
+		FVector(0.0f, 0.0f, BlockSize.Z + 16.0f),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		TriggerVolumeTransformOffset);
 }
 
 void APlatformerVanishingBlock::OnTriggerVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

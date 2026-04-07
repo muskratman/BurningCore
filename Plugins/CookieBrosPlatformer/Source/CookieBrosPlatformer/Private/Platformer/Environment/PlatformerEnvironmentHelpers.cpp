@@ -1,6 +1,7 @@
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 
 #include "AbilitySystemComponent.h"
+#include "Components/SceneComponent.h"
 #include "AbilitySystemInterface.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 #include "GameplayEffect.h"
@@ -8,6 +9,26 @@
 
 namespace PlatformerEnvironment
 {
+	void ApplyRelativeTransform(
+		USceneComponent* Component,
+		const FVector& BaseLocation,
+		const FRotator& BaseRotation,
+		const FVector& BaseScale,
+		const FPlatformerComponentTransformOffset& TransformOffset)
+	{
+		if (Component == nullptr)
+		{
+			return;
+		}
+
+		const FVector FinalScale = BaseScale * TransformOffset.RelativeScale3D;
+		const FQuat FinalRotation = BaseRotation.Quaternion() * TransformOffset.RelativeRotation.Quaternion();
+
+		Component->SetRelativeLocation(BaseLocation + TransformOffset.RelativeLocation);
+		Component->SetRelativeRotation(FinalRotation);
+		Component->SetRelativeScale3D(FinalScale);
+	}
+
 	bool ApplyConfiguredDamage(AActor* SourceActor, AActor* TargetActor, TSubclassOf<UGameplayEffect> DamageEffectClass, float DirectDamage, const FHitResult& HitResult)
 	{
 		if (!TargetActor || TargetActor == SourceActor)

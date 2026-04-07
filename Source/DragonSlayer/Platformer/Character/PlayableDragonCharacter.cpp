@@ -24,11 +24,20 @@ APlayableDragonCharacter::APlayableDragonCharacter(const FObjectInitializer& Obj
 	}
 }
 
+USideViewMovementComponent* APlayableDragonCharacter::GetSideViewMovementComponent() const
+{
+	return Cast<USideViewMovementComponent>(GetCharacterMovement());
+}
+
 void APlayableDragonCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	if (GetCharacterMovement())
+	if (const USideViewMovementComponent* SideViewMovementComponent = GetSideViewMovementComponent())
+	{
+		DefaultGravityScale = SideViewMovementComponent->GetBaseGravityScale();
+	}
+	else if (GetCharacterMovement())
 	{
 		DefaultGravityScale = GetCharacterMovement()->GravityScale;
 	}
@@ -52,6 +61,7 @@ void APlayableDragonCharacter::PossessedBy(AController* NewController)
 		{
 			if (DashAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(DashAbilityClass, 1, INDEX_NONE, this));
 			if (JumpAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(JumpAbilityClass, 1, INDEX_NONE, this));
+			if (CrouchAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(CrouchAbilityClass, 1, INDEX_NONE, this));
 			if (BaseShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(BaseShotAbilityClass, 1, INDEX_NONE, this));
 			if (ChargeShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ChargeShotAbilityClass, 1, INDEX_NONE, this));
 		}
@@ -81,6 +91,12 @@ void APlayableDragonCharacter::SetupPlayerInputComponent(UInputComponent* Player
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_JumpEnd);
 		}
 		if (DashAction) EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_Dash);
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_CrouchStart);
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_CrouchEnd);
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_CrouchEnd);
+		}
 		
 		if (BaseShotAction)
 		{
@@ -107,11 +123,45 @@ void APlayableDragonCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (IsOnLadder())
+	{
+		if (bLadderClimbUpHeld && !bLadderClimbDownHeld)
+		{
+			AddMovementInput(FVector::UpVector, 1.0f);
+		}
+		else if (bLadderClimbDownHeld && !bLadderClimbUpHeld)
+		{
+			AddMovementInput(FVector::DownVector, 1.0f);
+		}
+		else if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+		{
+			FVector Velocity = MovementComponent->Velocity;
+			Velocity.Z = 0.0f;
+			MovementComponent->Velocity = Velocity;
+		}
+	}
+
 	// Cap falling speed if gliding
 	if (bIsGliding && GetCharacterMovement()->Velocity.Z < -200.0f)
 	{
 		GetCharacterMovement()->Velocity.Z = -200.0f;
 	}
+}
+
+void APlayableDragonCharacter::ApplyDeveloperCharacterMovementSettings(const FDeveloperPlatformerCharacterMovementSettings& DeveloperCharacterMovementSettings)
+{
+	Super::ApplyDeveloperCharacterMovementSettings(DeveloperCharacterMovementSettings);
+
+	if (const USideViewMovementComponent* SideViewMovementComponent = GetSideViewMovementComponent())
+	{
+		DefaultGravityScale = SideViewMovementComponent->GetBaseGravityScale();
+	}
+	else if (const UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		DefaultGravityScale = MovementComponent->GravityScale;
+	}
+
+	PreGlideGravityOverride = DefaultGravityScale;
 }
 
 void APlayableDragonCharacter::Landed(const FHitResult& Hit)
@@ -133,7 +183,27 @@ void APlayableDragonCharacter::Input_Move(const FInputActionValue& Value)
 {
 	if (Controller != nullptr)
 	{
-		float MoveValue = Value.Get<float>();
+		float MoveValue = 0.0f;
+
+		if (Value.GetValueType() == EInputActionValueType::Axis2D)
+		{
+			const FVector2D MoveVector = Value.Get<FVector2D>();
+			MoveValue = MoveVector.X;
+		}
+		else
+		{
+			MoveValue = Value.Get<float>();
+		}
+
+		if (IsOnLadder())
+		{
+			if (!FMath::IsNearlyZero(MoveValue))
+			{
+				AddMovementInput(FVector(1.0f, 0.0f, 0.0f), MoveValue);
+			}
+
+			return;
+		}
 		
 		// In side scrolling, movement is typically along the X axis
 		const FVector MoveDir = FVector(1.0f, 0.0f, 0.0f);
@@ -152,6 +222,21 @@ void APlayableDragonCharacter::Input_Move(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 {
+	if (IsOnLadder())
+	{
+		bLadderClimbUpHeld = true;
+		return;
+	}
+
+	if (APlatformerLadder* AvailableLadder = GetAvailableLadder())
+	{
+		if (EnterLadder(AvailableLadder))
+		{
+			bLadderClimbUpHeld = true;
+			return;
+		}
+	}
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		// Try to activate Jump Ability if granted
@@ -169,6 +254,12 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_JumpEnd(const FInputActionValue& Value)
 {
+	if (IsOnLadder() || bLadderClimbUpHeld)
+	{
+		bLadderClimbUpHeld = false;
+		return;
+	}
+
 	// Tell GAS that the jump key was released so UGA_Jump can call EndAbility()
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
@@ -193,6 +284,49 @@ void APlayableDragonCharacter::Input_Dash(const FInputActionValue& Value)
 			ASC->TryActivateAbilityByClass(DashAbilityClass);
 		}
 	}
+}
+
+void APlayableDragonCharacter::Input_CrouchStart(const FInputActionValue& Value)
+{
+	if (IsOnLadder())
+	{
+		bLadderClimbDownHeld = true;
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		if (CrouchAbilityClass)
+		{
+			ASC->TryActivateAbilityByClass(CrouchAbilityClass);
+			return;
+		}
+	}
+
+	Crouch();
+}
+
+void APlayableDragonCharacter::Input_CrouchEnd(const FInputActionValue& Value)
+{
+	if (IsOnLadder() || bLadderClimbDownHeld)
+	{
+		bLadderClimbDownHeld = false;
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+	{
+		if (CrouchAbilityClass)
+		{
+			if (FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(CrouchAbilityClass))
+			{
+				ASC->AbilitySpecInputReleased(*Spec);
+			}
+			return;
+		}
+	}
+
+	UnCrouch();
 }
 
 void APlayableDragonCharacter::Input_BaseShot(const FInputActionValue& Value)
@@ -234,8 +368,18 @@ void APlayableDragonCharacter::Input_ChargeShotEnd(const FInputActionValue& Valu
 
 void APlayableDragonCharacter::Input_FlyToggle(const FInputActionValue& Value)
 {
+	if (IsOnLadder())
+	{
+		return;
+	}
+
 	if (!bIsFlying)
 	{
+		if (bIsGliding)
+		{
+			Input_GlideEnd(FInputActionValue());
+		}
+
 		bIsFlying = true;
 		GetCharacterMovement()->SetMovementMode(MOVE_Flying);
 	}
@@ -248,15 +392,71 @@ void APlayableDragonCharacter::Input_FlyToggle(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_GlideStart(const FInputActionValue& Value)
 {
-	if (GetCharacterMovement()->IsFalling() && !bIsFlying)
+	if (IsOnLadder())
+	{
+		return;
+	}
+
+	if (GetCharacterMovement()->IsFalling() && !bIsFlying && !bIsGliding)
 	{
 		bIsGliding = true;
-		GetCharacterMovement()->GravityScale = DefaultGravityScale * 0.1f;
+
+		if (USideViewMovementComponent* SideViewMovementComponent = GetSideViewMovementComponent())
+		{
+			bHadPreGlideGravityOverride = SideViewMovementComponent->HasExternalGravityScaleOverride();
+			PreGlideGravityOverride = SideViewMovementComponent->GetExternalGravityScaleOverride();
+			SideViewMovementComponent->SetExternalGravityScaleOverride(DefaultGravityScale * 0.1f);
+		}
+		else if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+		{
+			MovementComponent->GravityScale = DefaultGravityScale * 0.1f;
+		}
 	}
 }
 
 void APlayableDragonCharacter::Input_GlideEnd(const FInputActionValue& Value)
 {
+	if (!bIsGliding)
+	{
+		return;
+	}
+
 	bIsGliding = false;
-	GetCharacterMovement()->GravityScale = DefaultGravityScale;
+
+	if (USideViewMovementComponent* SideViewMovementComponent = GetSideViewMovementComponent())
+	{
+		if (bHadPreGlideGravityOverride)
+		{
+			SideViewMovementComponent->SetExternalGravityScaleOverride(PreGlideGravityOverride);
+		}
+		else
+		{
+			SideViewMovementComponent->ClearExternalGravityScaleOverride();
+		}
+	}
+	else if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
+	{
+		MovementComponent->GravityScale = DefaultGravityScale;
+	}
+
+	bHadPreGlideGravityOverride = false;
+	PreGlideGravityOverride = DefaultGravityScale;
+}
+
+void APlayableDragonCharacter::OnEnteredLadder(APlatformerLadder* Ladder)
+{
+	if (bIsGliding)
+	{
+		Input_GlideEnd(FInputActionValue());
+	}
+
+	// Ladder climb uses its own movement state and should not inherit the manual fly toggle flag.
+	bIsFlying = false;
+	bLadderClimbDownHeld = false;
+}
+
+void APlayableDragonCharacter::OnExitedLadder(APlatformerLadder* Ladder)
+{
+	bLadderClimbUpHeld = false;
+	bLadderClimbDownHeld = false;
 }

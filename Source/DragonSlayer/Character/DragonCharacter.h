@@ -25,6 +25,7 @@ class DRAGONSLAYER_API ADragonCharacter : public APlatformerCharacterBase
 
 public:
 	ADragonCharacter(const FObjectInitializer& ObjectInitializer);
+	UDragonAttributeSet* GetDragonAttributeSet() const;
 
 public:
 	FORCEINLINE UDragonFormComponent* GetFormComponent() const { return FormComponent; }

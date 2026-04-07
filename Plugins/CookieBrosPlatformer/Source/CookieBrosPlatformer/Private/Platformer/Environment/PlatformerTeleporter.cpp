@@ -2,16 +2,22 @@
 
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlatformerTeleporter::APlatformerTeleporter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerTeleporter.PlatformerTeleporter")));
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	RootComponent = SceneRoot;
+
 	TriggerVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerVolume"));
-	RootComponent = TriggerVolume;
+	TriggerVolume->SetupAttachment(RootComponent);
 
 	TriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	TriggerVolume->SetCollisionObjectType(ECC_WorldDynamic);
@@ -20,9 +26,36 @@ APlatformerTeleporter::APlatformerTeleporter()
 
 	TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &APlatformerTeleporter::OnTriggerVolumeBeginOverlap);
 
+	TeleporterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TeleporterMesh"));
+	TeleporterMesh->SetupAttachment(RootComponent);
+	TeleporterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (CylinderMesh.Succeeded())
+	{
+		TeleporterMesh->SetStaticMesh(CylinderMesh.Object);
+	}
+
 	ExitPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("ExitPoint"));
 	ExitPoint->SetupAttachment(RootComponent);
 	ExitPoint->SetRelativeLocation(FVector(150.0f, 0.0f, 0.0f));
+
+	ExitTriggerVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ExitTriggerVolume"));
+	ExitTriggerVolume->SetupAttachment(ExitPoint);
+	ExitTriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	ExitTriggerVolume->SetCollisionObjectType(ECC_WorldDynamic);
+	ExitTriggerVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
+	ExitTriggerVolume->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	ExitTriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &APlatformerTeleporter::OnExitTriggerVolumeBeginOverlap);
+
+	ExitTeleporterMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ExitTeleporterMesh"));
+	ExitTeleporterMesh->SetupAttachment(ExitPoint);
+	ExitTeleporterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	if (CylinderMesh.Succeeded())
+	{
+		ExitTeleporterMesh->SetStaticMesh(CylinderMesh.Object);
+	}
 }
 
 void APlatformerTeleporter::RegisterArrival(AActor* Actor)
@@ -34,32 +67,69 @@ void APlatformerTeleporter::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	TriggerVolume->SetBoxExtent(TriggerExtent);
+	ExitTriggerVolume->SetBoxExtent(TriggerExtent);
 }
 
 void APlatformerTeleporter::OnTriggerVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!OtherActor || !DestinationTeleporter || DestinationTeleporter == this || !CanTeleportActor(OtherActor))
+	if (!OtherActor || !CanTeleportActor(OtherActor))
 	{
 		return;
 	}
 
-	DestinationTeleporter->RegisterArrival(OtherActor);
-	MarkActorTeleported(OtherActor);
+	TeleportActorFromPointA(OtherActor);
+}
 
-	OtherActor->TeleportTo(DestinationTeleporter->GetExitLocation(), DestinationTeleporter->GetExitRotation(), false, true);
+void APlatformerTeleporter::OnExitTriggerVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!bTwoSidedTeleport || !OtherActor || !CanTeleportActor(OtherActor))
+	{
+		return;
+	}
 
-	if (ACharacter* Character = Cast<ACharacter>(OtherActor))
+	TeleportActorFromPointB(OtherActor);
+}
+
+void APlatformerTeleporter::TeleportActorFromPointA(AActor* Actor)
+{
+	APlatformerTeleporter* Destination = DestinationTeleporter ? DestinationTeleporter.Get() : this;
+	if (Destination == nullptr)
+	{
+		return;
+	}
+
+	TeleportActorToResolvedDestination(Actor, Destination->GetExitLocation(), Destination->GetExitRotation(), Destination);
+}
+
+void APlatformerTeleporter::TeleportActorFromPointB(AActor* Actor)
+{
+	TeleportActorToResolvedDestination(Actor, GetEntryLocation(), GetEntryRotation(), this);
+}
+
+void APlatformerTeleporter::TeleportActorToResolvedDestination(AActor* Actor, const FVector& DestinationLocation, const FRotator& DestinationRotation, APlatformerTeleporter* DestinationSettingsOwner)
+{
+	if (Actor == nullptr || DestinationSettingsOwner == nullptr)
+	{
+		return;
+	}
+
+	DestinationSettingsOwner->RegisterArrival(Actor);
+	MarkActorTeleported(Actor);
+
+	Actor->TeleportTo(DestinationLocation, DestinationRotation, false, true);
+
+	if (ACharacter* Character = Cast<ACharacter>(Actor))
 	{
 		if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
 		{
-			if (!DestinationTeleporter->bKeepVelocity)
+			if (!DestinationSettingsOwner->bKeepVelocity)
 			{
 				MovementComponent->StopMovementImmediately();
 			}
 
-			if (DestinationTeleporter->ExitSpeed > 0.0f)
+			if (DestinationSettingsOwner->ExitSpeed > 0.0f)
 			{
-				MovementComponent->Velocity = DestinationTeleporter->GetExitRotation().Vector() * DestinationTeleporter->ExitSpeed;
+				MovementComponent->Velocity = DestinationRotation.Vector() * DestinationSettingsOwner->ExitSpeed;
 			}
 		}
 	}
@@ -86,6 +156,16 @@ void APlatformerTeleporter::MarkActorTeleported(AActor* Actor)
 	{
 		RecentlyTeleportedActors.Add(Actor, GetWorld()->GetTimeSeconds());
 	}
+}
+
+FVector APlatformerTeleporter::GetEntryLocation() const
+{
+	return GetActorLocation();
+}
+
+FRotator APlatformerTeleporter::GetEntryRotation() const
+{
+	return GetActorRotation();
 }
 
 FVector APlatformerTeleporter::GetExitLocation() const

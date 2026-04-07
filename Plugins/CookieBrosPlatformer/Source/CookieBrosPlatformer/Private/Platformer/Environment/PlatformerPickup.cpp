@@ -3,10 +3,12 @@
 #include "Platformer/Environment/PlatformerPickup.h"
 #include "Components/SceneComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/GameModeBase.h"
 #include "Interfaces/PlatformerPickupSink.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlatformerPickup::APlatformerPickup()
 {
@@ -14,6 +16,16 @@ APlatformerPickup::APlatformerPickup()
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerPickup.PlatformerPickup")));
 
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+
+	PickupMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PickupMesh"));
+	PickupMesh->SetupAttachment(RootComponent);
+	PickupMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMesh.Succeeded())
+	{
+		PickupMesh->SetStaticMesh(SphereMesh.Object);
+	}
 
 	Sphere = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	Sphere->SetupAttachment(RootComponent);

@@ -1,15 +1,41 @@
 #include "Platformer/Environment/PlatformerGravityVolume.h"
 
+#include "Character/SideViewMovementComponent.h"
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "Components/BoxComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlatformerGravityVolume::APlatformerGravityVolume()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerGravityVolume.PlatformerGravityVolume")));
 
+	RootComponent = Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+
+	VolumeMeshLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VolumeMeshLayoutRoot"));
+	VolumeMeshLayoutRoot->SetupAttachment(Root);
+
+	VolumeMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VolumeMesh"));
+	VolumeMesh->SetupAttachment(VolumeMeshLayoutRoot);
+	VolumeMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	VolumeMesh->SetCollisionObjectType(ECC_WorldDynamic);
+	VolumeMesh->SetCollisionResponseToAllChannels(ECR_Overlap);
+	VolumeMesh->SetGenerateOverlapEvents(true);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		VolumeMesh->SetStaticMesh(CubeMesh.Object);
+	}
+
+	VolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VolumeLayoutRoot"));
+	VolumeLayoutRoot->SetupAttachment(Root);
+
 	Volume = CreateDefaultSubobject<UBoxComponent>(TEXT("Volume"));
-	RootComponent = Volume;
+	Volume->SetupAttachment(VolumeLayoutRoot);
 
 	Volume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Volume->SetCollisionObjectType(ECC_WorldDynamic);
@@ -20,10 +46,34 @@ APlatformerGravityVolume::APlatformerGravityVolume()
 	Volume->OnComponentEndOverlap.AddDynamic(this, &APlatformerGravityVolume::OnVolumeEndOverlap);
 }
 
+void APlatformerGravityVolume::SetVolumeSize(const FVector& InVolumeSize)
+{
+	VolumeSize = InVolumeSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+}
+
 void APlatformerGravityVolume::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	Volume->SetBoxExtent(VolumeExtent);
+
+	const FVector ResolvedVolumeSize = VolumeSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+	const FVector BoxExtent = ResolvedVolumeSize * 0.5f;
+	const FVector ComponentLocation(0.0f, 0.0f, BoxExtent.Z);
+	const FVector MeshLocation = bVolumeMeshUsesBottomPivot ? FVector::ZeroVector : ComponentLocation;
+
+	PlatformerEnvironment::ApplyRelativeTransform(
+		VolumeMeshLayoutRoot,
+		MeshLocation,
+		FRotator::ZeroRotator,
+		ResolvedVolumeSize / 100.0f,
+		VolumeMeshTransformOffset);
+
+	Volume->SetBoxExtent(BoxExtent);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		VolumeLayoutRoot,
+		ComponentLocation,
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		VolumeTransformOffset);
 }
 
 void APlatformerGravityVolume::Tick(float DeltaTime)
@@ -74,10 +124,18 @@ void APlatformerGravityVolume::OnVolumeBeginOverlap(UPrimitiveComponent* Overlap
 		FPlatformerGravityVolumeState SavedState;
 		SavedState.GravityScale = MovementComponent->GravityScale;
 		SavedState.MovementMode = MovementComponent->MovementMode;
+		if (USideViewMovementComponent* SideViewMovementComponent = Cast<USideViewMovementComponent>(MovementComponent))
+		{
+			SavedState.bHadExternalGravityScaleOverride = SideViewMovementComponent->HasExternalGravityScaleOverride();
+			SavedState.ExternalGravityScaleOverride = SideViewMovementComponent->GetExternalGravityScaleOverride();
+			SideViewMovementComponent->SetExternalGravityScaleOverride(GravityScaleOverride);
+		}
+		else
+		{
+			MovementComponent->GravityScale = GravityScaleOverride;
+		}
 
 		AffectedCharacters.Add(Character, SavedState);
-
-		MovementComponent->GravityScale = GravityScaleOverride;
 		if (bUseFlyingMovementMode)
 		{
 			MovementComponent->SetMovementMode(MOVE_Flying);
@@ -108,7 +166,21 @@ void APlatformerGravityVolume::RestoreCharacter(ACharacter* Character)
 
 	if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
 	{
-		MovementComponent->GravityScale = SavedState->GravityScale;
+		if (USideViewMovementComponent* SideViewMovementComponent = Cast<USideViewMovementComponent>(MovementComponent))
+		{
+			if (SavedState->bHadExternalGravityScaleOverride)
+			{
+				SideViewMovementComponent->SetExternalGravityScaleOverride(SavedState->ExternalGravityScaleOverride);
+			}
+			else
+			{
+				SideViewMovementComponent->ClearExternalGravityScaleOverride();
+			}
+		}
+		else
+		{
+			MovementComponent->GravityScale = SavedState->GravityScale;
+		}
 		MovementComponent->SetMovementMode(SavedState->MovementMode);
 	}
 

@@ -39,6 +39,26 @@ public:
 	FGameplayAttributeData AttackSpeed;
 	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, AttackSpeed)
 
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FGameplayAttributeData MeleeAttackDamage;
+	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, MeleeAttackDamage)
+
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FGameplayAttributeData MeleeAttackDelay;
+	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, MeleeAttackDelay)
+
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FGameplayAttributeData RangeBaseAttackDamage;
+	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, RangeBaseAttackDamage)
+
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FGameplayAttributeData RangeChargedAttackDamage;
+	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, RangeChargedAttackDamage)
+
+	UPROPERTY(BlueprintReadOnly, Category="Combat")
+	FGameplayAttributeData RangeAttackDelay;
+	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, RangeAttackDelay)
+
 	UPROPERTY(BlueprintReadOnly, Category="Movement")
 	FGameplayAttributeData MoveSpeed;
 	PLATFORMER_ATTRIBUTE_ACCESSORS(UPlatformerCharacterAttributeSet, MoveSpeed)

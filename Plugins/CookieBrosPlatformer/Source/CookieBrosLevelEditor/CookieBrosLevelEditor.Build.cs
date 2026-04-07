@@ -14,27 +14,21 @@ public class CookieBrosLevelEditor : ModuleRules
 				"Core",
 				"CoreUObject",
 				"Engine",
-				"InputCore",
-				"CookieBrosPlatformer"
+				"CookieBrosPlatformer",
+				"Paper2D"
 			}
 		);
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"InputCore",
 				"Slate",
 				"SlateCore",
 				"UnrealEd",
-				"EditorFramework",
 				"LevelEditor",
 				"PropertyEditor",
-				"InteractiveToolsFramework",
-				"EditorInteractiveToolsFramework",
-				"ToolMenus",
-				"Projects",
-				"Json",
-				"JsonUtilities",
-				"GameplayTags"
+				"ToolMenus"
 			}
 		);
 	}

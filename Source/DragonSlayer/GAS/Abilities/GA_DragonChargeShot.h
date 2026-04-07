@@ -19,6 +19,7 @@ class DRAGONSLAYER_API UGA_DragonChargeShot : public UGameplayAbility
 public:
 	UGA_DragonChargeShot();
 
+	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
 protected:
@@ -27,4 +28,7 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> ChargeLoopMontage;
+
+	UPROPERTY(Transient)
+	mutable float LastDeveloperChargedShotActivationTime = -1.0f;
 };

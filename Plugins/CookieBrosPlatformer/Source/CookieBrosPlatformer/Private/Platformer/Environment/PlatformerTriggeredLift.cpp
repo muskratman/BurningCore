@@ -1,15 +1,21 @@
 #include "Platformer/Environment/PlatformerTriggeredLift.h"
 
+#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/SceneComponent.h"
 #include "GameFramework/Character.h"
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "TimerManager.h"
 
 APlatformerTriggeredLift::APlatformerTriggeredLift()
 {
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerTriggeredLift.PlatformerTriggeredLift")));
 
+	TriggerVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TriggerVolumeLayoutRoot"));
+	TriggerVolumeLayoutRoot->SetupAttachment(Root);
+
 	TriggerVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerVolume"));
-	TriggerVolume->SetupAttachment(PlatformMesh);
+	TriggerVolume->SetupAttachment(TriggerVolumeLayoutRoot);
 	TriggerVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	TriggerVolume->SetCollisionObjectType(ECC_WorldDynamic);
 	TriggerVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -17,14 +23,30 @@ APlatformerTriggeredLift::APlatformerTriggeredLift()
 
 	TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &APlatformerTriggeredLift::OnTriggerBeginOverlap);
 	TriggerVolume->OnComponentEndOverlap.AddDynamic(this, &APlatformerTriggeredLift::OnTriggerEndOverlap);
+
+	PointBBaseRelativeLocation = FVector(0.0f, 0.0f, 500.0f);
+	bAutoStart = false;
+}
+
+void APlatformerTriggeredLift::SetTriggerSize(const FVector& InTriggerSize)
+{
+	TriggerSize = InTriggerSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
 }
 
 void APlatformerTriggeredLift::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
+	const FVector ResolvedTriggerSize = TriggerSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+	const FVector TriggerExtent = ResolvedTriggerSize * 0.5f;
+
 	TriggerVolume->SetBoxExtent(TriggerExtent);
-	TriggerVolume->SetRelativeLocation(FVector(0.0f, 0.0f, (PlatformSize.Z * 0.5f) + TriggerExtent.Z));
+	PlatformerEnvironment::ApplyRelativeTransform(
+		TriggerVolumeLayoutRoot,
+		FVector(0.0f, 0.0f, (PlatformSize.Z * 0.5f) + TriggerExtent.Z),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		TriggerVolumeTransformOffset);
 }
 
 void APlatformerTriggeredLift::HandlePauseFinishedAtPointB()

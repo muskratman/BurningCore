@@ -1,9 +1,16 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Platformer/Camera/PlatformerCameraManager.h"
+#include "Core/SaveGame/SaveDeveloperSettings.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
+
+void APlatformerCameraManager::BeginPlay()
+{
+	Super::BeginPlay();
+	LoadAndApplyDeveloperCameraManagerSettings();
+}
 
 void APlatformerCameraManager::ResolveBaseCameraPose(const APawn& TargetPawn, FVector& OutLocation, FRotator& OutRotation, float& OutFOV) const
 {
@@ -30,6 +37,39 @@ FVector2D APlatformerCameraManager::ResolveMovementDirection2D(const FVector& Ve
 {
 	const FVector2D MovementInPlane(Velocity.X, Velocity.Z);
 	return MovementInPlane.GetSafeNormal();
+}
+
+void APlatformerCameraManager::ApplyDeveloperCameraManagerSettings(const FDeveloperPlatformerCameraManagerSettings& DeveloperCameraManagerSettings)
+{
+	IdleSpeedThreshold = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerIdleSpeedThreshold * 100.0f);
+	HorizontalOffset = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffset);
+	HorizontalOffsetInterpSpeedStart = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart);
+	HorizontalOffsetInterpSpeedEnd = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd);
+	VerticalOffset = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffset);
+	VerticalOffsetInterpSpeed = FMath::Max(0.0f, DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed);
+
+	CurrentHorizontalOffset = FMath::Clamp(CurrentHorizontalOffset, -HorizontalOffset, HorizontalOffset);
+	CurrentVerticalOffset = FMath::Clamp(CurrentVerticalOffset, -VerticalOffset, VerticalOffset);
+}
+
+FDeveloperPlatformerCameraManagerSettings APlatformerCameraManager::CaptureDeveloperCameraManagerSettings() const
+{
+	FDeveloperPlatformerCameraManagerSettings DeveloperCameraManagerSettings;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerIdleSpeedThreshold = IdleSpeedThreshold / 100.0f;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffset = HorizontalOffset;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart = HorizontalOffsetInterpSpeedStart;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd = HorizontalOffsetInterpSpeedEnd;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffset = VerticalOffset;
+	DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed = VerticalOffsetInterpSpeed;
+	return DeveloperCameraManagerSettings;
+}
+
+void APlatformerCameraManager::LoadAndApplyDeveloperCameraManagerSettings()
+{
+	if (USaveDeveloperSettings* LoadedDeveloperSettings = USaveDeveloperSettings::LoadDeveloperSettingsFromSlot(this))
+	{
+		ApplyDeveloperCameraManagerSettings(LoadedDeveloperSettings->DeveloperCameraManagerSettings);
+	}
 }
 
 void APlatformerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime)

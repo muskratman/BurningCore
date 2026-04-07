@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Platformer/Environment/PlatformerComponentTransformOverride.h"
 #include "PlatformerSpikes.generated.h"
 
 class UBoxComponent;
@@ -23,6 +24,9 @@ public:
 	APlatformerSpikes();
 
 	virtual void Tick(float DeltaTime) override;
+	void SetSpikeSize(const FVector& InSpikeSize);
+
+	FORCEINLINE const FVector& GetSpikeSize() const { return SpikeSize; }
 
 protected:
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -31,13 +35,25 @@ protected:
 	TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> MeshLayoutRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UStaticMeshComponent> Mesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<USceneComponent> DamageVolumeLayoutRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UBoxComponent> DamageVolume;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spikes|Shape")
-	FVector SpikeSize = FVector(160.0f, 200.0f, 40.0f);
+	FVector SpikeSize = FVector(160.0f, 500.0f, 40.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spikes|Components")
+	FPlatformerComponentTransformOffset MeshTransformOffset;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spikes|Components")
+	FPlatformerComponentTransformOffset DamageVolumeTransformOffset;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spikes|Damage", meta=(ClampMin=0.0))
 	float DamageAmount = 1.0f;

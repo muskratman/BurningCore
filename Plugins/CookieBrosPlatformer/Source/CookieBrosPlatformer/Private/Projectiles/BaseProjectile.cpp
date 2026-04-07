@@ -32,6 +32,24 @@ ABaseProjectile::ABaseProjectile()
 	ProjectileMovement->ProjectileGravityScale = 0.0f; // Standard projectiles lack gravity
 }
 
+void ABaseProjectile::ApplyDeveloperProjectileSpeed(float DeveloperProjectileSpeed)
+{
+	Speed = FMath::Max(0.0f, DeveloperProjectileSpeed);
+
+	if (!ProjectileMovement)
+	{
+		return;
+	}
+
+	ProjectileMovement->InitialSpeed = Speed;
+	ProjectileMovement->MaxSpeed = Speed;
+
+	const FVector CurrentDirection = ProjectileMovement->Velocity.IsNearlyZero()
+		? GetActorForwardVector()
+		: ProjectileMovement->Velocity.GetSafeNormal();
+	ProjectileMovement->Velocity = CurrentDirection * Speed;
+}
+
 void ABaseProjectile::BeginPlay()
 {
 	Super::BeginPlay();

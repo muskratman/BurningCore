@@ -7,6 +7,7 @@
 #include "PlatformerPlayerController.generated.h"
 
 class APlayableDragonCharacter;
+class UInputAction;
 
 /**
  *  A simple platformer player controller
@@ -18,13 +19,23 @@ class APlatformerPlayerController : public APlatformerPlayerControllerBase
 {
 	GENERATED_BODY()
 
+public:
+	APlatformerPlayerController();
+
 protected:
 
 	/** Production pawn class to respawn when the possessed pawn is destroyed */
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<APlayableDragonCharacter> CharacterClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input|Input Mappings")
+	TObjectPtr<UInputAction> ToggleDeveloperAction;
+
 protected:
+	virtual void SetupInputComponent() override;
 	virtual APawn* SpawnRespawnPawn(const FTransform& SpawnTransform) override;
 	virtual void HandlePauseRequested() override;
+
+private:
+	void HandleDeveloperSettingsToggleRequested();
 };

@@ -1,6 +1,6 @@
 #include "UI/PauseMenu/PauseWidget.h"
-#include "Components/Button.h"
 #include "Core/UI/DragonSlayerHUD.h"
+#include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -48,8 +48,11 @@ void UPauseWidget::OnSettingsClicked() {
 }
 
 void UPauseWidget::OnDevSettingsClicked() {
-  // TBD: Toggle visibility of DevSettings panel
-  UE_LOG(LogTemp, Warning, TEXT("DevSettings clicked - Placeholder"));
+  if (APlayerController *PC = GetOwningPlayer()) {
+    if (ADragonSlayerHUD *HUD = Cast<ADragonSlayerHUD>(PC->GetHUD())) {
+      HUD->ShowDeveloperSettingsWidget();
+    }
+  }
 }
 
 void UPauseWidget::OnExitClicked() {

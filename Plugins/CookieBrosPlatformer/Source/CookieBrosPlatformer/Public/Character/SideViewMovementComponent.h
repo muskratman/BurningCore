@@ -39,6 +39,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category="SideView")
 	void SetDepthLane(float NewY, float TransitionTime = 0.3f);
 
+	UFUNCTION(BlueprintCallable, Category="SideView|Gravity")
+	void SetExternalGravityScaleOverride(float NewGravityScale);
+
+	UFUNCTION(BlueprintCallable, Category="SideView|Gravity")
+	void ClearExternalGravityScaleOverride();
+
+	UFUNCTION(BlueprintCallable, Category="SideView|Gravity")
+	void SetBaseGravityScale(float NewGravityScale);
+
+	UFUNCTION(BlueprintPure, Category="SideView|Gravity")
+	bool HasExternalGravityScaleOverride() const { return bHasExternalGravityScaleOverride; }
+
+	UFUNCTION(BlueprintPure, Category="SideView|Gravity")
+	float GetExternalGravityScaleOverride() const { return ExternalGravityScaleOverride; }
+
+	UFUNCTION(BlueprintPure, Category="SideView|Gravity")
+	float GetBaseGravityScale() const { return DefaultGravityScale; }
+
 protected:
 	virtual void PhysCustom(float DeltaTime, int32 Iterations) override;
 
@@ -48,4 +66,7 @@ protected:
 	float DepthTransitionSpeed;
 	float LastGroundedTime;
 	float LastJumpInputTime;
+	float DefaultGravityScale;
+	bool bHasExternalGravityScaleOverride;
+	float ExternalGravityScaleOverride;
 };

@@ -1,9 +1,10 @@
 #include "Platformer/Environment/PlatformerLadder.h"
 
+#include "Character/PlatformerCharacterBase.h"
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "GameFramework/Character.h"
 #include "UObject/ConstructorHelpers.h"
 
 APlatformerLadder::APlatformerLadder()
@@ -13,8 +14,11 @@ APlatformerLadder::APlatformerLadder()
 
 	RootComponent = Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 
+	LadderMeshLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("LadderMeshLayoutRoot"));
+	LadderMeshLayoutRoot->SetupAttachment(Root);
+
 	LadderMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LadderMesh"));
-	LadderMesh->SetupAttachment(Root);
+	LadderMesh->SetupAttachment(LadderMeshLayoutRoot);
 	LadderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -23,8 +27,11 @@ APlatformerLadder::APlatformerLadder()
 		LadderMesh->SetStaticMesh(CubeMesh.Object);
 	}
 
+	ClimbVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ClimbVolumeLayoutRoot"));
+	ClimbVolumeLayoutRoot->SetupAttachment(Root);
+
 	ClimbVolume = CreateDefaultSubobject<UBoxComponent>(TEXT("ClimbVolume"));
-	ClimbVolume->SetupAttachment(Root);
+	ClimbVolume->SetupAttachment(ClimbVolumeLayoutRoot);
 	ClimbVolume->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	ClimbVolume->SetCollisionObjectType(ECC_WorldDynamic);
 	ClimbVolume->SetCollisionResponseToAllChannels(ECR_Ignore);
@@ -34,74 +41,43 @@ APlatformerLadder::APlatformerLadder()
 	ClimbVolume->OnComponentEndOverlap.AddDynamic(this, &APlatformerLadder::OnClimbVolumeEndOverlap);
 }
 
+void APlatformerLadder::SetLadderSize(const FVector& InLadderSize)
+{
+	LadderSize = InLadderSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+}
+
 void APlatformerLadder::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	LadderMesh->SetRelativeLocation(FVector(0.0f, 0.0f, LadderSize.Z * 0.5f));
-	LadderMesh->SetRelativeScale3D(LadderSize / 100.0f);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		LadderMeshLayoutRoot,
+		FVector(0.0f, 0.0f, LadderSize.Z * 0.5f),
+		FRotator::ZeroRotator,
+		LadderSize / 100.0f,
+		LadderMeshTransformOffset);
 
-	ClimbVolume->SetRelativeLocation(FVector(0.0f, 0.0f, LadderSize.Z * 0.5f));
 	ClimbVolume->SetBoxExtent(LadderSize * 0.5f);
+	PlatformerEnvironment::ApplyRelativeTransform(
+		ClimbVolumeLayoutRoot,
+		FVector(0.0f, 0.0f, LadderSize.Z * 0.5f),
+		FRotator::ZeroRotator,
+		FVector::OneVector,
+		ClimbVolumeTransformOffset);
 }
 
 void APlatformerLadder::OnClimbVolumeBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	ACharacter* Character = Cast<ACharacter>(OtherActor);
-	if (!Character || ClimbingCharacters.Contains(Character))
+	if (APlatformerCharacterBase* PlatformerCharacter = Cast<APlatformerCharacterBase>(OtherActor))
 	{
-		return;
-	}
-
-	if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-	{
-		FPlatformerLadderState SavedState;
-		SavedState.GravityScale = MovementComponent->GravityScale;
-		SavedState.MovementMode = MovementComponent->MovementMode;
-
-		ClimbingCharacters.Add(Character, SavedState);
-
-		MovementComponent->GravityScale = ClimbGravityScale;
-		if (bUseFlyingMovementMode)
-		{
-			MovementComponent->SetMovementMode(MOVE_Flying);
-		}
-
-		if (bSnapCharacterDepthToLadder)
-		{
-			FVector CharacterLocation = Character->GetActorLocation();
-			CharacterLocation.Y = GetActorLocation().Y;
-			Character->SetActorLocation(CharacterLocation);
-		}
+		PlatformerCharacter->NotifyLadderAvailable(this);
 	}
 }
 
 void APlatformerLadder::OnClimbVolumeEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (ACharacter* Character = Cast<ACharacter>(OtherActor))
+	if (APlatformerCharacterBase* PlatformerCharacter = Cast<APlatformerCharacterBase>(OtherActor))
 	{
-		RestoreCharacter(Character);
+		PlatformerCharacter->NotifyLadderUnavailable(this);
 	}
-}
-
-void APlatformerLadder::RestoreCharacter(ACharacter* Character)
-{
-	if (!Character)
-	{
-		return;
-	}
-
-	const FPlatformerLadderState* SavedState = ClimbingCharacters.Find(Character);
-	if (!SavedState)
-	{
-		return;
-	}
-
-	if (UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
-	{
-		MovementComponent->GravityScale = SavedState->GravityScale;
-		MovementComponent->SetMovementMode(SavedState->MovementMode);
-	}
-
-	ClimbingCharacters.Remove(Character);
 }

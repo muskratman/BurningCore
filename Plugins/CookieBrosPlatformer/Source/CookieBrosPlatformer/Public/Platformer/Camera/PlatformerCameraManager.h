@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Developer/DeveloperPlatformerSettingsTypes.h"
 #include "PlatformerCameraManager.generated.h"
 
 class APawn;
@@ -17,9 +18,13 @@ class COOKIEBROSPLATFORMER_API APlatformerCameraManager : public APlayerCameraMa
 	GENERATED_BODY()
 
 public:
+	virtual void BeginPlay() override;
 
 	/** Overrides the default camera view target calculation */
 	virtual void UpdateViewTarget(FTViewTarget& OutVT, float DeltaTime) override;
+
+	virtual void ApplyDeveloperCameraManagerSettings(const FDeveloperPlatformerCameraManagerSettings& DeveloperCameraManagerSettings);
+	virtual FDeveloperPlatformerCameraManagerSettings CaptureDeveloperCameraManagerSettings() const;
 
 protected:
 
@@ -28,6 +33,7 @@ protected:
 
 	/** Converts current movement into a normalized look-ahead direction in the visible platforming plane. */
 	FVector2D ResolveMovementDirection2D(const FVector& Velocity) const;
+	void LoadAndApplyDeveloperCameraManagerSettings();
 
 public:
 

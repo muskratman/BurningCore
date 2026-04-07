@@ -4,40 +4,51 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "TileMap/TileMapTypes.h"
 #include "TileSetAsset.generated.h"
+
+class AActor;
+
+USTRUCT(BlueprintType)
+struct COOKIEBROSPLATFORMER_API FPaperTileImportRule
+{
+	GENERATED_BODY()
+
+	/** UserDataName read from the source Paper2D TileSet tile. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Import")
+	FName UserDataName;
+
+	/** Environment actor to spawn when this UserDataName is encountered. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Import")
+	TSubclassOf<AActor> ImportActorClass;
+};
 
 /**
  * UTileSetAsset
- * A DataAsset containing a palette of tile definitions.
- * Referenced by UTileMapAsset to look up meshes, icons, sizes, etc.
+ * Legacy-named DataAsset used as a PaperTileMap import mapping.
+ * Maps Paper2D TileSet UserDataName values to environment actor classes.
  */
-UCLASS(BlueprintType)
+UCLASS(BlueprintType, meta=(DisplayName="Paper Tile Import Mapping"))
 class COOKIEBROSPLATFORMER_API UTileSetAsset : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 
 public:
-	/** Human-readable name for this tile set. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TileSet")
-	FName TileSetName;
-
-	/** All tile definitions in this set. Each must have a unique TileID. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="TileSet")
-	TArray<FTileDefinition> Tiles;
+	/** Import rules evaluated against Paper2D TileSet UserDataName values. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Import")
+	TArray<FPaperTileImportRule> Rules;
 
 	// ----- Lookup helpers -----
 
-	/** Find a tile definition by its unique ID. Returns nullptr if not found. */
-	const FTileDefinition* FindTileByID(FName TileID) const;
+	/** Find an import rule by normalized Paper2D TileSet UserDataName. */
+	const FPaperTileImportRule* FindRuleByUserDataName(FName UserDataName) const;
 
-	/** Get valid tile IDs. */
-	UFUNCTION(BlueprintPure, Category="TileSet")
-	TArray<FName> GetAllTileIDs() const;
+	/** Get all configured UserDataName values. */
+	UFUNCTION(BlueprintPure, Category="Import")
+	TArray<FName> GetAllUserDataNames() const;
 
-	/** Check whether a given ID exists in this set. */
-	UFUNCTION(BlueprintPure, Category="TileSet")
-	bool ContainsTileID(FName TileID) const;
+	/** Check whether a given Paper2D UserDataName exists in the mapping. */
+	UFUNCTION(BlueprintPure, Category="Import")
+	bool ContainsUserDataName(FName UserDataName) const;
 
 	// ----- UPrimaryDataAsset overrides -----
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override;

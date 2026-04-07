@@ -6,6 +6,11 @@ UPlatformerCharacterAttributeSet::UPlatformerCharacterAttributeSet()
 	, MaxHealth(10.0f)
 	, BaseDamage(1.0f)
 	, AttackSpeed(1.0f)
+	, MeleeAttackDamage(1.0f)
+	, MeleeAttackDelay(0.0f)
+	, RangeBaseAttackDamage(1.0f)
+	, RangeChargedAttackDamage(1.0f)
+	, RangeAttackDelay(0.0f)
 	, MoveSpeed(600.0f)
 	, JumpHeight(600.0f)
 	, IncomingDamage(0.0f)
@@ -25,6 +30,14 @@ void UPlatformerCharacterAttributeSet::PreAttributeChange(const FGameplayAttribu
 		NewValue = FMath::Max(NewValue, 1.0f);
 	}
 	else if (Attribute == GetBaseDamageAttribute() || Attribute == GetAttackSpeedAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.0f);
+	}
+	else if (Attribute == GetMeleeAttackDamageAttribute()
+		|| Attribute == GetRangeBaseAttackDamageAttribute()
+		|| Attribute == GetRangeChargedAttackDamageAttribute()
+		|| Attribute == GetMeleeAttackDelayAttribute()
+		|| Attribute == GetRangeAttackDelayAttribute())
 	{
 		NewValue = FMath::Max(NewValue, 0.0f);
 	}

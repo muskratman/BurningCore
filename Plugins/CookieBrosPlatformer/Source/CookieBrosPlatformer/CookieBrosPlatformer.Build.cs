@@ -21,18 +21,16 @@ public class CookieBrosPlatformer : ModuleRules
 				"GameplayTags",
 				"GameplayTasks",
 				"InputCore",
-				"Json",
-				"JsonUtilities",
 				"Slate",
-				"StateTreeModule"
+				"StateTreeModule",
+				"UMG"
 			}
 		);
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"SlateCore",
-				"UMG"
+				"SlateCore"
 			}
 		);
 	}
