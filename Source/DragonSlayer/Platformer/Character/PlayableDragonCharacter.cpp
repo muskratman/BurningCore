@@ -228,9 +228,9 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 		return;
 	}
 
-	if (APlatformerLadder* AvailableLadder = GetAvailableLadder())
+	if (APlatformerLadder* CandidateLadder = GetAvailableLadder())
 	{
-		if (EnterLadder(AvailableLadder))
+		if (EnterLadder(CandidateLadder))
 		{
 			bLadderClimbUpHeld = true;
 			return;
