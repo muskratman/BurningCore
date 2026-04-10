@@ -1121,9 +1121,9 @@ const FPlatformerDeveloperSettingsSlotDescriptor* UPlatformerDeveloperSettingsWi
 		return nullptr;
 	}
 
-	return CachedDeveloperSlots.FindByPredicate([&SanitizedDisplayName](const FPlatformerDeveloperSettingsSlotDescriptor& Slot)
+	return CachedDeveloperSlots.FindByPredicate([&SanitizedDisplayName](const FPlatformerDeveloperSettingsSlotDescriptor& SlotDescriptor)
 	{
-		return Slot.DisplayName.Equals(SanitizedDisplayName, ESearchCase::IgnoreCase);
+		return SlotDescriptor.DisplayName.Equals(SanitizedDisplayName, ESearchCase::IgnoreCase);
 	});
 }
 

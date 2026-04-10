@@ -337,9 +337,9 @@ void APlatformerCharacterBase::OnCombatDeath(AActor* DamageInstigatorActor)
 		CharacterMesh->SetVisibility(false, true);
 	}
 
-	if (UCapsuleComponent* CapsuleComponent = GetCapsuleComponent())
+	if (UCapsuleComponent* CharacterCapsule = GetCapsuleComponent())
 	{
-		CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CharacterCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	if (HealthWidgetComponent)
@@ -363,9 +363,9 @@ void APlatformerCharacterBase::OnCombatRevived()
 		CharacterMesh->SetVisibility(true, true);
 	}
 
-	if (UCapsuleComponent* CapsuleComponent = GetCapsuleComponent())
+	if (UCapsuleComponent* CharacterCapsule = GetCapsuleComponent())
 	{
-		CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		CharacterCapsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	}
 
 	if (HealthWidgetComponent)

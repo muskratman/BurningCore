@@ -264,9 +264,9 @@ void APlatformerCombatCharacterBase::UpdateHealthWidgetPlacement()
 	}
 
 	float CapsuleHalfHeight = 0.0f;
-	if (const UCapsuleComponent* CapsuleComponent = GetCapsuleComponent())
+	if (const UCapsuleComponent* CharacterCapsule = GetCapsuleComponent())
 	{
-		CapsuleHalfHeight = CapsuleComponent->GetScaledCapsuleHalfHeight();
+		CapsuleHalfHeight = CharacterCapsule->GetScaledCapsuleHalfHeight();
 	}
 
 	HealthWidgetComponent->SetRelativeLocation(FVector(0.0f, 0.0f, CapsuleHalfHeight + GetHealthWidgetVerticalPadding()));
