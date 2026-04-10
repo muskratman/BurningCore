@@ -4,24 +4,30 @@
 #include "Components/StateTreeComponent.h"
 #include "Data/PlatformerEnemyArchetypeAsset.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
+#include "GAS/PlatformerGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Damage.h"
 #include "Perception/AISenseConfig_Sight.h"
+#include "Perception/AISense_Sight.h"
 
-APlatformerEnemyBase::APlatformerEnemyBase()
+APlatformerEnemyBase::APlatformerEnemyBase(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
+	if (AttributeSet)
+	{
+		const float DefaultMaxHealth = GetDefaultMaxHealth();
+		AttributeSet->InitMaxHealth(DefaultMaxHealth);
+		AttributeSet->InitHealth(DefaultMaxHealth);
+	}
 
 	StateTreeComponent = CreateDefaultSubobject<UStateTreeComponent>(TEXT("StateTree"));
 
 	PerceptionComponent = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception"));
 
-	UAISenseConfig_Sight* SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
+	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 	SightConfig->SightRadius = 1500.0f;
 	SightConfig->LoseSightRadius = 2000.0f;
 	SightConfig->PeripheralVisionAngleDegrees = 90.0f;
@@ -31,48 +37,16 @@ APlatformerEnemyBase::APlatformerEnemyBase()
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
 	PerceptionComponent->ConfigureSense(*SightConfig);
 
-	UAISenseConfig_Damage* DamageConfig = CreateDefaultSubobject<UAISenseConfig_Damage>(TEXT("DamageConfig"));
-	DamageConfig->SetMaxAge(5.0f);
-	PerceptionComponent->ConfigureSense(*DamageConfig);
+	DamageSenseConfig = CreateDefaultSubobject<UAISenseConfig_Damage>(TEXT("DamageConfig"));
+	DamageSenseConfig->SetMaxAge(5.0f);
+	PerceptionComponent->ConfigureSense(*DamageSenseConfig);
 	PerceptionComponent->SetDominantSense(UAISense_Sight::StaticClass());
+	PerceptionComponent->OnTargetPerceptionUpdated.AddDynamic(this, &APlatformerEnemyBase::HandleTargetPerceptionUpdated);
 
 	bUseControllerRotationYaw = false;
 	GetCharacterMovement()->bOrientRotationToMovement = true;
-}
 
-UAbilitySystemComponent* APlatformerEnemyBase::GetAbilitySystemComponent() const
-{
-	return AbilitySystemComponent;
-}
-
-void APlatformerEnemyBase::ApplyDamage(const FGameplayEffectSpecHandle& DamageSpec, const FHitResult& HitResult)
-{
-	if (!AbilitySystemComponent || !DamageSpec.IsValid() || !IsAlive() || !AttributeSet)
-	{
-		return;
-	}
-
-	const float PreHealth = AttributeSet->GetHealth();
-	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*DamageSpec.Data.Get());
-
-	const float PostHealth = AttributeSet->GetHealth();
-	const float ActualDamage = PreHealth - PostHealth;
-
-	if (!IsAlive())
-	{
-		HandleDeath();
-	}
-	else if (ActualDamage >= StaggerThreshold)
-	{
-		FGameplayEventData EventData;
-		EventData.EventMagnitude = ActualDamage;
-		AbilitySystemComponent->HandleGameplayEvent(FGameplayTag::RequestGameplayTag(TEXT("Event.Hit.Received")), &EventData);
-	}
-}
-
-bool APlatformerEnemyBase::IsAlive() const
-{
-	return AttributeSet && AttributeSet->GetHealth() > 0.0f;
+	UpdateHealthWidgetPlacement();
 }
 
 void APlatformerEnemyBase::InitializeFromArchetype(const UPlatformerEnemyArchetypeAsset* Archetype)
@@ -82,16 +56,43 @@ void APlatformerEnemyBase::InitializeFromArchetype(const UPlatformerEnemyArchety
 		return;
 	}
 
-	AttributeSet->SetMaxHealth(Archetype->BaseHealth);
-	AttributeSet->SetHealth(Archetype->BaseHealth);
+	const float ResolvedBaseHealth =
+		(Archetype->BaseHealth <= 0.0f || FMath::IsNearlyEqual(Archetype->BaseHealth, 3.0f))
+			? GetDefaultMaxHealth()
+			: Archetype->BaseHealth;
+
+	AttributeSet->SetMaxHealth(ResolvedBaseHealth);
+	AttributeSet->SetHealth(ResolvedBaseHealth);
 	AttributeSet->SetBaseDamage(Archetype->BaseDamage);
 	AttributeSet->SetAttackSpeed(Archetype->AttackSpeed);
+	AttributeSet->SetMeleeAttackDamage(Archetype->BaseDamage);
+	AttributeSet->SetRangeBaseAttackDamage(Archetype->BaseDamage);
+	AttributeSet->SetMeleeAttackDelay(Archetype->AttackSpeed > 0.0f ? 1.0f / Archetype->AttackSpeed : 0.0f);
+	AttributeSet->SetRangeAttackDelay(Archetype->AttackSpeed > 0.0f ? 1.0f / Archetype->AttackSpeed : 0.0f);
 	AttributeSet->SetMoveSpeed(Archetype->MoveSpeed);
+
+	CombatEngageRange = FMath::Max(Archetype->CombatEngageRange, 0.0f);
+	CombatLoseTargetRange = FMath::Max(Archetype->CombatLoseTargetRange, CombatEngageRange);
+	CombatAttackRange = FMath::Max(Archetype->CombatAttackRange, 0.0f);
+	AttackDamageEffectClass = Archetype->DamageEffectClass;
 
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 	{
 		MovementComponent->MaxWalkSpeed = Archetype->MoveSpeed;
 	}
+
+	if (SightConfig)
+	{
+		SightConfig->SightRadius = CombatEngageRange;
+		SightConfig->LoseSightRadius = CombatLoseTargetRange;
+	}
+
+	if (PerceptionComponent)
+	{
+		PerceptionComponent->RequestStimuliListenerUpdate();
+	}
+
+	ApplyArchetypeCombatData(Archetype);
 
 	if (StateTreeComponent && Archetype->BehaviorTree)
 	{
@@ -109,31 +110,226 @@ void APlatformerEnemyBase::InitializeFromArchetype(const UPlatformerEnemyArchety
 			}
 		}
 	}
+
+	SyncCombatLifeStateFromAttributes();
+	RefreshHealthWidget();
 }
 
 void APlatformerEnemyBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (AbilitySystemComponent)
+	InitializeFromArchetype(DefaultArchetype);
+}
+
+void APlatformerEnemyBase::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!CurrentCombatTarget)
 	{
-		AbilitySystemComponent->InitAbilityActorInfo(this, this);
-		InitializeFromArchetype(DefaultArchetype);
+		return;
+	}
+
+	if (!CurrentCombatTarget->IsAlive() || GetCombatDistanceToTarget(CurrentCombatTarget) > CombatLoseTargetRange)
+	{
+		SetCombatTarget(nullptr);
 	}
 }
 
-void APlatformerEnemyBase::OnHealthChanged(const FOnAttributeChangeData& Data)
+bool APlatformerEnemyBase::TryAttackCurrentTarget()
 {
-	if (Data.NewValue <= 0.0f)
+	return TryAttackTarget(CurrentCombatTarget);
+}
+
+bool APlatformerEnemyBase::TryAttackTarget(APlatformerCombatCharacterBase* TargetActor)
+{
+	if (!CanAttackTarget(TargetActor))
 	{
-		HandleDeath();
+		return false;
+	}
+
+	if (!PerformAttack(TargetActor))
+	{
+		return false;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		LastAttackWorldTime = World->GetTimeSeconds();
+	}
+
+	return true;
+}
+
+void APlatformerEnemyBase::SetCombatTarget(APlatformerCombatCharacterBase* NewTarget)
+{
+	if (NewTarget == this || (NewTarget && !NewTarget->IsAlive()))
+	{
+		NewTarget = nullptr;
+	}
+
+	if (CurrentCombatTarget == NewTarget)
+	{
+		return;
+	}
+
+	APlatformerCombatCharacterBase* PreviousTarget = CurrentCombatTarget;
+	CurrentCombatTarget = NewTarget;
+	OnCombatTargetChanged(PreviousTarget, CurrentCombatTarget);
+}
+
+void APlatformerEnemyBase::OnCombatDamageReceived(float DamageAmount, const FHitResult& HitResult, AActor* DamageInstigatorActor)
+{
+	Super::OnCombatDamageReceived(DamageAmount, HitResult, DamageInstigatorActor);
+
+	if (APlatformerCombatCharacterBase* DamageInstigatorCharacter = Cast<APlatformerCombatCharacterBase>(DamageInstigatorActor))
+	{
+		SetCombatTarget(DamageInstigatorCharacter);
+	}
+
+	if (AbilitySystemComponent && DamageAmount >= StaggerThreshold)
+	{
+		FGameplayEventData EventData;
+		EventData.EventMagnitude = DamageAmount;
+		EventData.Instigator = DamageInstigatorActor;
+		EventData.Target = this;
+		AbilitySystemComponent->HandleGameplayEvent(PlatformerGameplayTags::Event_Combat_HitReceived, &EventData);
 	}
 }
 
-void APlatformerEnemyBase::HandleDeath()
+void APlatformerEnemyBase::OnCombatDeath(AActor* DamageInstigatorActor)
 {
-	if (AbilitySystemComponent)
+	Super::OnCombatDeath(DamageInstigatorActor);
+
+	SetCombatTarget(nullptr);
+
+	if (StateTreeComponent)
 	{
-		AbilitySystemComponent->AddLooseGameplayTag(FGameplayTag::RequestGameplayTag(TEXT("State.Dead")));
+		StateTreeComponent->StopLogic(TEXT("Combat death"));
+	}
+
+	if (PerceptionComponent)
+	{
+		PerceptionComponent->SetComponentTickEnabled(false);
+	}
+
+	if (HasAuthority())
+	{
+		Destroy();
+	}
+}
+
+float APlatformerEnemyBase::GetDefaultMaxHealth() const
+{
+	return 100.0f;
+}
+
+float APlatformerEnemyBase::GetAttackRange() const
+{
+	return CombatAttackRange;
+}
+
+float APlatformerEnemyBase::GetAttackCooldown() const
+{
+	if (!AttributeSet)
+	{
+		return 0.0f;
+	}
+
+	const float AttackSpeed = AttributeSet->GetAttackSpeed();
+	return AttackSpeed > 0.0f ? 1.0f / AttackSpeed : 0.0f;
+}
+
+float APlatformerEnemyBase::GetAttackDamageAmount() const
+{
+	if (!AttributeSet)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Max(AttributeSet->GetBaseDamage(), 0.0f);
+}
+
+float APlatformerEnemyBase::GetProjectileMaxDistance() const
+{
+	return ProjectileMaxDistance;
+}
+
+float APlatformerEnemyBase::GetHealthWidgetVerticalPadding() const
+{
+	return PlatformerHealthWidgetVerticalPadding;
+}
+
+bool APlatformerEnemyBase::CanAttackTarget(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	if (!TargetActor || !TargetActor->IsAlive() || !IsAlive())
+	{
+		return false;
+	}
+
+	if (GetCombatDistanceToTarget(TargetActor) > GetAttackRange())
+	{
+		return false;
+	}
+
+	if (const UWorld* World = GetWorld())
+	{
+		const float AttackCooldown = GetAttackCooldown();
+		if (AttackCooldown > 0.0f && World->GetTimeSeconds() - LastAttackWorldTime < AttackCooldown)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool APlatformerEnemyBase::PerformAttack(APlatformerCombatCharacterBase* TargetActor)
+{
+	return false;
+}
+
+void APlatformerEnemyBase::ApplyArchetypeCombatData(const UPlatformerEnemyArchetypeAsset* Archetype)
+{
+}
+
+void APlatformerEnemyBase::OnCombatTargetChanged(APlatformerCombatCharacterBase* PreviousTarget, APlatformerCombatCharacterBase* NewTarget)
+{
+	BP_OnCombatTargetChanged(PreviousTarget, NewTarget);
+}
+
+float APlatformerEnemyBase::GetCombatDistanceToTarget(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	if (!TargetActor)
+	{
+		return TNumericLimits<float>::Max();
+	}
+
+	const FVector SourceLocation = GetActorLocation();
+	const FVector TargetLocation = TargetActor->GetActorLocation();
+	const FVector FlattenedSourceLocation(SourceLocation.X, 0.0f, SourceLocation.Z);
+	const FVector FlattenedTargetLocation(TargetLocation.X, 0.0f, TargetLocation.Z);
+	return FVector::Dist(FlattenedSourceLocation, FlattenedTargetLocation);
+}
+
+void APlatformerEnemyBase::HandleTargetPerceptionUpdated(AActor* UpdatedActor, FAIStimulus Stimulus)
+{
+	APlatformerCombatCharacterBase* SensedCombatTarget = Cast<APlatformerCombatCharacterBase>(UpdatedActor);
+	if (!SensedCombatTarget || SensedCombatTarget == this)
+	{
+		return;
+	}
+
+	if (Stimulus.WasSuccessfullySensed())
+	{
+		if (GetCombatDistanceToTarget(SensedCombatTarget) <= CombatEngageRange)
+		{
+			SetCombatTarget(SensedCombatTarget);
+		}
+	}
+	else if (CurrentCombatTarget == SensedCombatTarget)
+	{
+		SetCombatTarget(nullptr);
 	}
 }

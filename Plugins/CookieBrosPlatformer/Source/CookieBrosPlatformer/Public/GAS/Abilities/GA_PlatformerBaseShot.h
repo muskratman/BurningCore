@@ -1,20 +1,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
-#include "GA_Crouch.generated.h"
+#include "GAS/Abilities/GA_PlatformerCombatAbilityBase.h"
+#include "GA_PlatformerBaseShot.generated.h"
 
 /**
- * GAS ability wrapping the default character crouch lifecycle.
- * Keeps the ability active while crouch input is held and releases on input-up.
+ * Generic projectile shot ability flow for platformer characters.
+ * Derived classes only need to resolve projectile/data specifics.
  */
-UCLASS()
-class COOKIEBROSPLATFORMER_API UGA_Crouch : public UGameplayAbility
+UCLASS(Abstract)
+class COOKIEBROSPLATFORMER_API UGA_PlatformerBaseShot : public UGA_PlatformerCombatAbilityBase
 {
 	GENERATED_BODY()
 
 public:
-	UGA_Crouch();
+	UGA_PlatformerBaseShot();
 
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
@@ -29,14 +29,13 @@ public:
 		const FGameplayAbilityActivationInfo ActivationInfo,
 		const FGameplayEventData* TriggerEventData) override;
 
-	virtual void InputReleased(
+protected:
+	virtual bool BuildBaseShotData(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
-		const FGameplayAbilityActivationInfo ActivationInfo) override;
+		FPlatformerProjectileShotData& OutShotData) const PURE_VIRTUAL(UGA_PlatformerBaseShot::BuildBaseShotData, return false;);
 
-	virtual void CancelAbility(
-		const FGameplayAbilitySpecHandle Handle,
-		const FGameplayAbilityActorInfo* ActorInfo,
-		const FGameplayAbilityActivationInfo ActivationInfo,
-		bool bReplicateCancelAbility) override;
+	virtual float GetBaseShotAttackDelay(const FGameplayAbilityActorInfo* ActorInfo) const;
+
+	mutable float LastBaseShotActivationTime = -1.0f;
 };

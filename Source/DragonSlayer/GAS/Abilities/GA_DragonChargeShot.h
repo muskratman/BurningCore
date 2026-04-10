@@ -1,26 +1,26 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
+#include "GAS/Abilities/GA_PlatformerChargeShot.h"
+#include "Traversal/PlatformerTraversalTypes.h"
 #include "GA_DragonChargeShot.generated.h"
 
 class UGameplayEffect;
 class UAnimMontage;
+class UDragonFormDataAsset;
+class ADragonCharacter;
 
 /**
  * UGA_DragonChargeShot
  * Hold-to-charge, release-to-fire ability.
  */
 UCLASS()
-class DRAGONSLAYER_API UGA_DragonChargeShot : public UGameplayAbility
+class DRAGONSLAYER_API UGA_DragonChargeShot : public UGA_PlatformerChargeShot
 {
 	GENERATED_BODY()
 	
 public:
 	UGA_DragonChargeShot();
-
-	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
-	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
 
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Damage")
@@ -29,6 +29,13 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> ChargeLoopMontage;
 
-	UPROPERTY(Transient)
-	mutable float LastDeveloperChargedShotActivationTime = -1.0f;
+private:
+	virtual UAnimMontage* GetChargeLoopMontage(const FGameplayAbilityActorInfo* ActorInfo) const override;
+	virtual bool GetChargeShotTuning(const FGameplayAbilityActorInfo* ActorInfo, FPlatformerChargeShotTuning& OutChargeTuning) const override;
+	virtual bool BuildChargeShotData(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FPlatformerChargeShotTuning& ChargeTuning,
+		EPlatformerChargeShotStage ChargeStage,
+		FPlatformerProjectileShotData& OutShotData) const override;
 };

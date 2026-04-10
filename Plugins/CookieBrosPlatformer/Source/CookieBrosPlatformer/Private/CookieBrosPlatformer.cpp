@@ -12,10 +12,17 @@ namespace CookieBrosPlatformer::Redirects
 		static const TArray<FCoreRedirect> Redirects = {
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.Damageable"), TEXT("/Script/CookieBrosPlatformer.Damageable") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.Interactable"), TEXT("/Script/CookieBrosPlatformer.Interactable") },
-			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.SideViewMovementComponent"), TEXT("/Script/CookieBrosPlatformer.SideViewMovementComponent") },
-			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Crouch"), TEXT("/Script/CookieBrosPlatformer.GA_Crouch") },
-			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Jump"), TEXT("/Script/CookieBrosPlatformer.GA_Jump") },
-			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Dash"), TEXT("/Script/CookieBrosPlatformer.GA_Dash") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.SideViewMovementComponent"), TEXT("/Script/CookieBrosPlatformer.PlatformerTraversalMovementComponent") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.SideViewMovementComponent"), TEXT("/Script/CookieBrosPlatformer.PlatformerTraversalMovementComponent") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Crouch"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerCrouch") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_Crouch"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerCrouch") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Jump"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerJump") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_Jump"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerJump") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.GA_Dash"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerDash") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_Dash"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerDash") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_SlideDash"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerSlideDash") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_BaseHit"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerBaseHit") },
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.GA_ChargeeHit"), TEXT("/Script/CookieBrosPlatformer.GA_PlatformerChargeeHit") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.BaseProjectile"), TEXT("/Script/CookieBrosPlatformer.BaseProjectile") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.CombatProjectile"), TEXT("/Script/CookieBrosPlatformer.CombatProjectile") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.EnemyProjectile"), TEXT("/Script/CookieBrosPlatformer.EnemyProjectile") },
@@ -37,7 +44,8 @@ namespace CookieBrosPlatformer::Redirects
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.PlatformerTriggeredLift"), TEXT("/Script/CookieBrosPlatformer.PlatformerTriggeredLift") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/BurningCORE.PlatformerVanishingBlock"), TEXT("/Script/CookieBrosPlatformer.PlatformerVanishingBlock") },
 			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.PlatformerPointToPointMover"), TEXT("/Script/CookieBrosPlatformer.PlatformerMovingPlatform") },
-			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.PlatformerPatrolPlatform"), TEXT("/Script/CookieBrosPlatformer.PlatformerMovingPlatform") }
+			{ ECoreRedirectFlags::Type_Class, TEXT("/Script/CookieBrosPlatformer.PlatformerPatrolPlatform"), TEXT("/Script/CookieBrosPlatformer.PlatformerMovingPlatform") },
+			{ ECoreRedirectFlags::Type_Property, TEXT("/Script/CookieBrosPlatformer.PlatformerTeleporter.DestinationTeleporter"), TEXT("/Script/CookieBrosPlatformer.PlatformerTeleporter.ExitTeleporter") }
 		};
 
 		return Redirects;

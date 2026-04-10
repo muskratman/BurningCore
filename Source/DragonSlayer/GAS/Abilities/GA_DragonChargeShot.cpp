@@ -1,123 +1,131 @@
 #include "GAS/Abilities/GA_DragonChargeShot.h"
 
-#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "Character/DragonCharacter.h"
 #include "Character/DragonFormComponent.h"
+#include "Character/DragonOverdriveComponent.h"
 #include "Data/DragonFormDataAsset.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
-#include "GAS/Effects/DeveloperDamageGameplayEffect.h"
 #include "Projectiles/Combat/DragonProjectile.h"
 
 UGA_DragonChargeShot::UGA_DragonChargeShot()
 {
-	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
-	// SetAssetTags(FGameplayTagContainer(FGameplayTag::RequestGameplayTag(FName("Ability.Shoot.Charge"))));
-	// SetActivationOwnedTags(FGameplayTagContainer(FGameplayTag::RequestGameplayTag(FName("Action.Charging"))));
 }
 
-bool UGA_DragonChargeShot::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, OUT FGameplayTagContainer* OptionalRelevantTags) const
+UAnimMontage* UGA_DragonChargeShot::GetChargeLoopMontage(const FGameplayAbilityActorInfo* ActorInfo) const
 {
-	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	return ChargeLoopMontage;
+}
+
+bool UGA_DragonChargeShot::GetChargeShotTuning(const FGameplayAbilityActorInfo* ActorInfo, FPlatformerChargeShotTuning& OutChargeTuning) const
+{
+	const ADragonCharacter* Character = ActorInfo ? Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	if (!Character || !Character->GetFormComponent())
 	{
 		return false;
 	}
 
-	const ADragonCharacter* Character = ActorInfo ? Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
-	if (!Character || !Character->HasActiveDeveloperCombatSettings())
-	{
-		return true;
-	}
-
-	const UPlatformerCharacterAttributeSet* PlatformerAttributeSet = Character->GetPlatformerAttributeSet();
-	if (!PlatformerAttributeSet)
-	{
-		return true;
-	}
-
-	const float DeveloperRangeAttackDelay = PlatformerAttributeSet->GetRangeAttackDelay();
-	if (DeveloperRangeAttackDelay <= 0.0f)
-	{
-		return true;
-	}
-
-	const UWorld* World = Character->GetWorld();
-	if (!World)
-	{
-		return true;
-	}
-
-	return (World->GetTimeSeconds() - LastDeveloperChargedShotActivationTime) >= DeveloperRangeAttackDelay;
+	return Character->GetFormComponent()->TryGetResolvedChargeShotTuning(OutChargeTuning);
 }
 
-void UGA_DragonChargeShot::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
+bool UGA_DragonChargeShot::BuildChargeShotData(
+	const FGameplayAbilitySpecHandle Handle,
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FPlatformerChargeShotTuning& ChargeTuning,
+	EPlatformerChargeShotStage ChargeStage,
+	FPlatformerProjectileShotData& OutShotData) const
 {
-	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
+	ADragonCharacter* Character = ActorInfo ? Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	if (!Character || !Character->GetFormComponent())
 	{
-		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
-		return;
+		return false;
 	}
 
-	ADragonCharacter* Character = Cast<ADragonCharacter>(ActorInfo->AvatarActor.Get());
-	if (Character && Character->GetFormComponent())
+	const UDragonFormDataAsset* FormData = Character->GetFormComponent()->GetActiveFormData();
+	if (!FormData)
 	{
-		if (UWorld* World = Character->GetWorld())
-		{
-			LastDeveloperChargedShotActivationTime = World->GetTimeSeconds();
-		}
-
-		const UDragonFormDataAsset* FormData = Character->GetFormComponent()->GetActiveFormData();
-		if (FormData && FormData->ChargeProjectileClass)
-		{
-			const FVector SpawnLoc = Character->GetActorLocation() + Character->GetActorForwardVector() * 100.0f;
-			const FRotator SpawnRot = Character->GetActorRotation();
-
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Instigator = Character;
-			SpawnParams.Owner = Character;
-
-			ADragonProjectile* Projectile = GetWorld()->SpawnActor<ADragonProjectile>(FormData->ChargeProjectileClass, SpawnLoc, SpawnRot, SpawnParams);
-			if (Projectile)
-			{
-				FGameplayEffectContextHandle ContextHandle = Character->GetAbilitySystemComponent()->MakeEffectContext();
-				ContextHandle.AddInstigator(Character, Character);
-
-				const UPlatformerCharacterAttributeSet* PlatformerAttributeSet = Character->GetPlatformerAttributeSet();
-				const bool bUseDeveloperCombatDamage =
-					Character->HasActiveDeveloperCombatSettings()
-					&& PlatformerAttributeSet
-					&& PlatformerAttributeSet->GetRangeChargedAttackDamage() > 0.0f;
-
-				if (bUseDeveloperCombatDamage)
-				{
-					FGameplayEffectSpecHandle DamageSpecHandle =
-						Character->GetAbilitySystemComponent()->MakeOutgoingSpec(UDeveloperDamageGameplayEffect::StaticClass(), GetAbilityLevel(), ContextHandle);
-					if (DamageSpecHandle.IsValid())
-					{
-						UAbilitySystemBlueprintLibrary::AssignTagSetByCallerMagnitude(
-							DamageSpecHandle,
-							UDeveloperDamageGameplayEffect::GetDeveloperDamageSetByCallerTag(),
-							PlatformerAttributeSet->GetRangeChargedAttackDamage());
-						Projectile->DamageEffectSpec = DamageSpecHandle;
-					}
-				}
-				else if (ChargeDamageEffectClass)
-				{
-					Projectile->DamageEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(ChargeDamageEffectClass, GetAbilityLevel(), ContextHandle);
-				}
-
-				if (FormData->OnHitStatusEffect)
-				{
-					Projectile->StatusEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(FormData->OnHitStatusEffect, GetAbilityLevel(), ContextHandle);
-				}
-
-				if (Character->HasActiveDeveloperCombatSettings())
-				{
-					Projectile->ApplyDeveloperProjectileSpeed(Character->GetActiveDeveloperCombatSettings().DeveloperCombatRangeChargedAttackSpeed);
-				}
-			}
-		}
+		return false;
 	}
 
-	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
+	const bool bOverdrive = Character->GetOverdriveComponent() && Character->GetOverdriveComponent()->IsOverdriveActive();
+	TSubclassOf<ADragonProjectile> ProjectileClass = nullptr;
+	if (ChargeStage == EPlatformerChargeShotStage::None)
+	{
+		ProjectileClass = FormData->ProjectileClass;
+		if (bOverdrive && FormData->OverdriveProjectileClass)
+		{
+			ProjectileClass = FormData->OverdriveProjectileClass;
+		}
+	}
+	else
+	{
+		ProjectileClass = FormData->ChargeProjectileClass;
+	}
+
+	if (ChargeStage == EPlatformerChargeShotStage::Partial && FormData->PartialChargeProjectileClass)
+	{
+		ProjectileClass = FormData->PartialChargeProjectileClass;
+	}
+
+	if (!ProjectileClass)
+	{
+		return false;
+	}
+
+	FGameplayEffectContextHandle ContextHandle = Character->GetAbilitySystemComponent()->MakeEffectContext();
+	ContextHandle.AddInstigator(Character, Character);
+
+	const UPlatformerCharacterAttributeSet* PlatformerAttributeSet = Character->GetPlatformerAttributeSet();
+	const float BaseShotDamage = PlatformerAttributeSet ? PlatformerAttributeSet->GetRangeBaseAttackDamage() : 0.0f;
+	const float FullChargeDamage = PlatformerAttributeSet ? PlatformerAttributeSet->GetRangeChargedAttackDamage() : 0.0f;
+
+	float ResolvedDamage = BaseShotDamage;
+	float ProjectileSpeedMultiplier = 1.0f;
+	if (ChargeStage == EPlatformerChargeShotStage::Full)
+	{
+		ResolvedDamage = FullChargeDamage;
+		ProjectileSpeedMultiplier = ChargeTuning.FullProjectileSpeedMultiplier;
+	}
+	else if (ChargeStage == EPlatformerChargeShotStage::Partial)
+	{
+		const float PartialDamage = BaseShotDamage * ChargeTuning.PartialDamageMultiplier;
+		ResolvedDamage = FullChargeDamage > 0.0f
+			? FMath::Clamp(PartialDamage, BaseShotDamage, FMath::Max(BaseShotDamage, FullChargeDamage - KINDA_SMALL_NUMBER))
+			: PartialDamage;
+		ProjectileSpeedMultiplier = ChargeTuning.PartialProjectileSpeedMultiplier;
+	}
+
+	const FVector SpawnLocation = Character->GetActorLocation() + Character->GetActorForwardVector() * 100.0f;
+	const FRotator SpawnRotation = Character->GetActorRotation();
+	OutShotData.ProjectileClass = ProjectileClass;
+	OutShotData.SpawnLocation = SpawnLocation;
+	OutShotData.SpawnRotation = SpawnRotation;
+	OutShotData.ProjectileMaxDistance = Character->GetProjectileMaxDistance();
+
+	if (ResolvedDamage > 0.0f)
+	{
+		FHitResult DamageHitResult;
+		DamageHitResult.Location = SpawnLocation;
+		DamageHitResult.ImpactPoint = SpawnLocation;
+		OutShotData.DamageEffectSpec = Character->MakeCombatDamageEffectSpec(ResolvedDamage, DamageHitResult, nullptr, GetAbilityLevel(Handle, ActorInfo));
+	}
+	else if (ChargeDamageEffectClass)
+	{
+		OutShotData.DamageEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(ChargeDamageEffectClass, GetAbilityLevel(Handle, ActorInfo), ContextHandle);
+	}
+
+	if (FormData->OnHitStatusEffect)
+	{
+		OutShotData.StatusEffectSpec = Character->GetAbilitySystemComponent()->MakeOutgoingSpec(FormData->OnHitStatusEffect, GetAbilityLevel(Handle, ActorInfo), ContextHandle);
+	}
+
+	if (Character->HasActiveDeveloperCombatSettings())
+	{
+		const float BaseProjectileSpeed = Character->GetActiveDeveloperCombatSettings().DeveloperCombatRangeBaseAttackSpeed;
+		const float ChargedProjectileSpeed = Character->GetActiveDeveloperCombatSettings().DeveloperCombatRangeChargedAttackSpeed;
+		OutShotData.ProjectileSpeedOverride =
+			(ChargeStage == EPlatformerChargeShotStage::None ? BaseProjectileSpeed : ChargedProjectileSpeed) * ProjectileSpeedMultiplier;
+	}
+
+	return OutShotData.IsValid();
 }

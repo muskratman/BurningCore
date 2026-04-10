@@ -10,6 +10,7 @@
 
 class UArrowComponent;
 class USceneComponent;
+class USplineComponent;
 class UStaticMeshComponent;
 class UTexture2D;
 
@@ -52,6 +53,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PostLoad() override;
+#if WITH_EDITOR
+	virtual void PostEditMove(bool bFinished) override;
+#endif
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USceneComponent> Root;
@@ -73,6 +77,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UArrowComponent> PointB;
+
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Editor")
+	TObjectPtr<UStaticMeshComponent> PointBPreviewMesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Editor")
+	TObjectPtr<USplineComponent> MovementPathSpline;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Moving Platform|Shape")
 	FVector PlatformSize = FVector(250.0f, 250.0f, 40.0f);
@@ -137,6 +149,13 @@ protected:
 
 	void StartMovingToPointA();
 	void StartMovingToPointB();
+	void RefreshMovingPlatformLayout();
+#if WITH_EDITOR
+	void RebaseEditorPointAToActorLocation();
+#endif
+#if WITH_EDITORONLY_DATA
+	void RefreshEditorPreviewComponents();
+#endif
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category="Moving Platform", meta=(DisplayName="Move to Target"))
 	void BP_MoveToTarget();

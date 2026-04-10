@@ -10,7 +10,7 @@
 class APawn;
 
 /**
- *  Simple platformer camera with smooth scrolling and horizontal bounds
+ *  Simple platformer camera with smooth scrolling and movement-based look-ahead.
  */
 UCLASS()
 class COOKIEBROSPLATFORMER_API APlatformerCameraManager : public APlayerCameraManager
@@ -48,14 +48,6 @@ public:
 	/** Default rotation used only if the pawn has no camera-related components. */
 	UPROPERTY(EditAnywhere, Category="Platformer Camera", meta=(ClampMin=-180.0f, ClampMax=180.0f))
 	FRotator FallbackRotation = FRotator(0.0f, -90.0f, 0.0f);
-
-	/** Minimum camera scrolling bounds in world space */
-	UPROPERTY(EditAnywhere, Category="Platformer Camera", meta=(ClampMin=-100000, ClampMax=100000, Units="cm"))
-	float CameraXMinBounds = -400.0f;
-
-	/** Maximum camera scrolling bounds in world space */
-	UPROPERTY(EditAnywhere, Category="Platformer Camera", meta=(ClampMin=-100000, ClampMax=100000, Units="cm"))
-	float CameraXMaxBounds = 10000.0f;
 
 	/** Movement speeds below this threshold are treated as idle to avoid tiny physics jitter offsets. */
 	UPROPERTY(EditAnywhere, Category="Platformer Camera|Smoothing", meta=(ClampMin=0.0f, ClampMax=500.0f, Units="cm/s"))

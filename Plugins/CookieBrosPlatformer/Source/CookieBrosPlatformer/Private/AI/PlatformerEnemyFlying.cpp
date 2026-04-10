@@ -3,7 +3,8 @@
 #include "Character/SideViewMovementComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
-APlatformerEnemyFlying::APlatformerEnemyFlying()
+APlatformerEnemyFlying::APlatformerEnemyFlying(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
 	// Flying enemies ignore gravity and stay in MOVE_Flying by default.
 	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement())

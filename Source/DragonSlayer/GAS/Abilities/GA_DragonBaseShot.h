@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
+#include "GAS/Abilities/GA_PlatformerBaseShot.h"
 #include "GA_DragonBaseShot.generated.h"
 
 class UGameplayEffect;
@@ -11,20 +11,19 @@ class UGameplayEffect;
  * Fires a projectile based on the current Form active in the Character's FormComponent.
  */
 UCLASS()
-class DRAGONSLAYER_API UGA_DragonBaseShot : public UGameplayAbility
+class DRAGONSLAYER_API UGA_DragonBaseShot : public UGA_PlatformerBaseShot
 {
 	GENERATED_BODY()
 	
 public:
 	UGA_DragonBaseShot();
 
-	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
-	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
-
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Damage")
 	TSubclassOf<UGameplayEffect> BaseDamageEffectClass;
 
-	UPROPERTY(Transient)
-	mutable float LastDeveloperBaseShotActivationTime = -1.0f;
+	virtual bool BuildBaseShotData(
+		const FGameplayAbilitySpecHandle Handle,
+		const FGameplayAbilityActorInfo* ActorInfo,
+		FPlatformerProjectileShotData& OutShotData) const override;
 };

@@ -12,6 +12,9 @@ Binaries/
 Intermediate/
 Saved/
 DerivedDataCache/
+.vs/
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
 
 # Compiled Java class files
 *.class
@@ -53,4 +56,3 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
-

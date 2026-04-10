@@ -1,12 +1,13 @@
-# Output Contract: BurningCORE
+# Output Contract: DragonSlayer
 
 ## Response Format
 
 ### Code Changes
 
 1. Покажи **де** (файл, клас, функція) і **що** змінюється
-2. Snippet ДО → ПІСЛЯ (або повний файл для нових)
-3. Якщо зміна торкається Build.cs або .uproject → позначити явно
+2. Якщо зміна перетинає межу `Plugins/CookieBrosPlatformer` ↔ `Source/DragonSlayer`, коротко поясни ЧОМУ код живе саме там
+3. Snippet ДО → ПІСЛЯ (або повний файл для нових)
+4. Якщо зміна торкається `Build.cs`, `.uproject` або reusable base у плагіні → позначити явно
 
 ### Нові класи
 
@@ -22,6 +23,7 @@
 - Коротко: що, чому, як це впливає на архітектуру
 - Не пояснюй очевидне (що таке UPROPERTY, як працює Cast)
 - ЧОМУ за кожним неочевидним рішенням
+- Якщо правиться документація, вкажи новий source of truth
 
 ## Language
 
@@ -31,6 +33,7 @@
 ## Build Verification
 
 - Після значних змін: «Build → перевір компіляцію»
+- Для gameplay/UI змін без тест-фреймворку нагадуй про PIE/manual verification
 - Не запускай build автоматично без підтвердження
 
 ## Error Handling

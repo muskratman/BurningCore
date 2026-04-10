@@ -1,10 +1,11 @@
-# Constraints: BurningCORE
+# Constraints: DragonSlayer
 
 ## Overcomplexity Protection
 
 - Простий код > розумний код; мінімум для поточної задачі
 - Не створюй абстракції для одноразових операцій
-- Новий Variant_* модуль → ⚠️ підтвердження
+- Не дублюй reusable platformer logic у `Source/DragonSlayer`, якщо її можна винести в `Plugins/CookieBrosPlatformer`
+- Не тягни DragonSlayer-specific gameplay у плагін, якщо механіка не має очевидної цінності для повторного використання
 
 ## Code Style
 
@@ -12,6 +13,7 @@
 // ✅ Forward declarations замість #include в .h
 class USpringArmComponent;
 class UCameraComponent;
+class UDragonFormComponent;
 
 // ❌ Зайві #include в хедері
 #include "GameFramework/SpringArmComponent.h"
@@ -28,13 +30,13 @@ float MeleeTraceDistance;
 ```
 
 ```cpp
-// ✅ UCLASS(abstract) для базових класів
+// ✅ UCLASS(Abstract) для reusable або project base classes
 UCLASS(abstract)
-class ACombatCharacter : public ACharacter, public ICombatAttacker, public ICombatDamageable
+class ADragonCharacter : public APlatformerCharacterBase
 
 // ❌ Базовий клас без abstract
 UCLASS()
-class ACombatCharacter : public ACharacter
+class ADragonCharacter : public APlatformerCharacterBase
 ```
 
 ```cpp
@@ -58,7 +60,8 @@ virtual void DoAttackTrace(FName DamageSourceBone) override;
 **Naming:**
 - Класи: `A` (Actor), `U` (UObject), `I` (Interface), `F` (structs), `E` (enums)
 - Файли: PascalCase, ім'я = клас без префіксу (`CombatCharacter.h`)
-- Variant-специфічні: `{Variant}ClassName` (CombatCharacter, PlatformingCharacter)
+- Reusable platformer foundation: `Platformer*`, `CookieBros*`
+- Project-specific layer: `Dragon*`, `DragonSlayer*`
 - Log categories: `DECLARE_LOG_CATEGORY_EXTERN(LogВаріант, Log, All)`
 - Input Actions: `{Дія}Action` (JumpAction, MoveAction, ComboAttackAction)
 
@@ -69,10 +72,11 @@ virtual void DoAttackTrace(FName DamageSourceBone) override;
 - ✅ `GetController() != nullptr` перед доступом до контролера
 - ✅ `Cast<>()` з перевіркою результату + UE_LOG при збої
 - ✅ `meta = (ClampMin, ClampMax)` для числових UPROPERTY
-- ❌ Defensive coding між внутрішніми модулями одного Variant
+- ❌ Переносити project-specific знання в reusable plugin без потреби
 
 ## Path Policy
 
-- Можливості > шляхи: «platformer environment» > `Platformer/Environment/`
-- Критичний шлях → `<!-- VERIFY -->` маркер
-- PublicIncludePaths в Build.cs <!-- VERIFY -->
+- Reusable platformer features → `Plugins/CookieBrosPlatformer/Source/CookieBrosPlatformer/...`
+- DragonSlayer-specific gameplay → `Source/DragonSlayer/...`
+- UI проекту → `Source/DragonSlayer/UI` або `Source/DragonSlayer/Core/UI`
+- Документація та ролі → `.rules/` і `Docs/`

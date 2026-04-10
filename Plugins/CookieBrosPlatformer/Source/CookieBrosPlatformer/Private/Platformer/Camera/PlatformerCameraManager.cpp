@@ -1,10 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Platformer/Camera/PlatformerCameraManager.h"
-#include "Core/SaveGame/SaveDeveloperSettings.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Core/PlatformerDeveloperSettingsSubsystem.h"
+#include "Engine/GameInstance.h"
 
 void APlatformerCameraManager::BeginPlay()
 {
@@ -66,9 +67,17 @@ FDeveloperPlatformerCameraManagerSettings APlatformerCameraManager::CaptureDevel
 
 void APlatformerCameraManager::LoadAndApplyDeveloperCameraManagerSettings()
 {
-	if (USaveDeveloperSettings* LoadedDeveloperSettings = USaveDeveloperSettings::LoadDeveloperSettingsFromSlot(this))
+	if (UGameInstance* GameInstance = GetGameInstance())
 	{
-		ApplyDeveloperCameraManagerSettings(LoadedDeveloperSettings->DeveloperCameraManagerSettings);
+		if (UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem =
+			GameInstance->GetSubsystem<UPlatformerDeveloperSettingsSubsystem>())
+		{
+			FPlatformerDeveloperSettingsSnapshot DeveloperSettingsSnapshot;
+			if (DeveloperSettingsSubsystem->TryLoadCurrentSnapshot(DeveloperSettingsSnapshot))
+			{
+				ApplyDeveloperCameraManagerSettings(DeveloperSettingsSnapshot.CameraManagerSettings);
+			}
+		}
 	}
 }
 
@@ -106,8 +115,5 @@ void APlatformerCameraManager::UpdateViewTarget(FTViewTarget& OutVT, float Delta
 	CurrentHorizontalOffset = FMath::FInterpTo(CurrentHorizontalOffset, TargetHorizontalLookAhead, DeltaTime, HorizontalInterpSpeed);
 	CurrentVerticalOffset = FMath::FInterpTo(CurrentVerticalOffset, TargetVerticalLookAhead, DeltaTime, VerticalOffsetInterpSpeed);
 
-	FVector FinalCameraLocation = BaseCameraLocation + FVector(CurrentHorizontalOffset, 0.0f, CurrentVerticalOffset);
-	FinalCameraLocation.X = FMath::Clamp(FinalCameraLocation.X, CameraXMinBounds, CameraXMaxBounds);
-
-	OutVT.POV.Location = FinalCameraLocation;
+	OutVT.POV.Location = BaseCameraLocation + FVector(CurrentHorizontalOffset, 0.0f, CurrentVerticalOffset);
 }

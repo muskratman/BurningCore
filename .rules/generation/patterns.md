@@ -1,117 +1,101 @@
-# Patterns: BurningCORE UE5 C++
+# Patterns: DragonSlayer UE5 C++
 
-## Pattern 1: Production Character
+## Pattern 1: Project-Specific Character Extends Reusable Base
 
 ```cpp
-// ✅ Production pawn наслідує gameplay base і додає input glue
+// ✅ DragonSlayer character наслідує reusable platformer shell
 UCLASS()
-class APlayableDragonCharacter : public ADragonCharacter
+class DRAGONSLAYER_API ADragonCharacter : public APlatformerCharacterBase
 {
     GENERATED_BODY()
-    // Production input bindings, pawn-specific tuning
+    // Dragon forms, overdrive, project-specific combat data
 };
 
-// ❌ Паралельний legacy pawn з дубльованим movement/input стеком
+// ❌ Копіювати camera/combat/movement shell з плагіна в project module
 ```
 
-## Pattern 2: UE5 Interface
+## Pattern 2: Project Glue Extends Platformer Flow Shell
 
 ```cpp
-// ✅ Мінімальний інтерфейс — pure virtual
-UINTERFACE(MinimalAPI, NotBlueprintable)
-class UCombatDamageable : public UInterface
+// ✅ Project mode/controller розширюють reusable flow classes
+UCLASS()
+class APlatformerGameMode : public APlatformerGameModeBase
 {
     GENERATED_BODY()
+    // UI spawning, project pickup flow, level-specific hooks
 };
 
-class ICombatDamageable
-{
-    GENERATED_BODY()
-public:
-    UFUNCTION(BlueprintCallable, Category="Damageable")
-    virtual void ApplyDamage(float Damage, AActor* DamageCauser,
-        const FVector& DamageLocation, const FVector& DamageImpulse) = 0;
-};
-
-// ❌ Інтерфейс з реалізацією або з полями
+// ❌ Створювати окремий паралельний framework у Source без reuse base class
 ```
 
-## Pattern 3: EnhancedInput — Do*() delegation
+## Pattern 3: Data Assets Reuse Plugin Contracts
 
 ```cpp
-// ✅ Input callback → public Do*() метод
+// ✅ Project asset розширює reusable archetype shell
+UCLASS()
+class DRAGONSLAYER_API UEnemyArchetypeAsset : public UPlatformerEnemyArchetypeAsset
+{
+    GENERATED_BODY()
+    // DragonSlayer-specific stats, tags, rewards
+};
+
+// ❌ Дублювати в project module уже існуючий reusable DataAsset base
+```
+
+## Pattern 4: Thin EnhancedInput Glue
+
+```cpp
+// ✅ Input handler thinly translates EnhancedInput data into gameplay actions
 void APlayableDragonCharacter::Input_Move(const FInputActionValue& Value)
 {
-    const float MoveValue = Value.Get<float>();
-    AddMovementInput(FVector(1.0f, 0.0f, 0.0f), MoveValue);
+    const FVector2D MoveVector = Value.Get<FVector2D>();
+    AddMovementInput(FVector(1.0f, 0.0f, 0.0f), MoveVector.X);
 }
 
-// ❌ Розкидати production input logic по кількох legacy pawn-класах
-void Move(const FInputActionValue& Value)
-{
-    // дублювання input glue
-}
+// ❌ Хардкодити великий шмат gameplay/system logic прямо в bind setup
 ```
 
-## Pattern 4: UPROPERTY — категорії та meta
+## Pattern 5: UPROPERTY — категорії та meta
 
 ```cpp
 // ✅ Повна специфікація
-UPROPERTY(EditAnywhere, Category="Melee Attack|Damage",
-    meta = (ClampMin = 0, ClampMax = 100))
-float MeleeDamage = 1.0f;
-
-UPROPERTY(EditAnywhere, Category="Camera",
-    meta = (ClampMin = 0, ClampMax = 1000, Units = "cm"))
-float DeathCameraDistance = 400.0f;
+UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Projectile",
+    meta = (ClampMin = 0.0, Units = "cm"))
+float ProjectileMaxDistance = 1500.0f;
 
 // ❌ Без категорії, без clamp, без default
 UPROPERTY(EditAnywhere)
-float MeleeDamage;
+float ProjectileMaxDistance;
 ```
 
-## Pattern 5: Component getters
+## Pattern 6: Component Getters
 
 ```cpp
 // ✅ FORCEINLINE getter
-FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+FORCEINLINE UDragonFormComponent* GetFormComponent() const { return FormComponent; }
 
 // ✅ Private component з AllowPrivateAccess
 UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components",
     meta = (AllowPrivateAccess = "true"))
-USpringArmComponent* CameraBoom;
+TObjectPtr<UDragonFormComponent> FormComponent;
 ```
 
-## Pattern 6: AnimNotify для gameplay events
+## Pattern 7: Save/Data/UI Derivation Over Duplication
 
 ```cpp
-// ✅ Окремий AnimNotify клас на кожну подію
-class UAnimNotify_DoAttackTrace : public UAnimNotify  // trace
-class UAnimNotify_CheckCombo : public UAnimNotify     // combo window
-class UAnimNotify_CheckChargedAttack : public UAnimNotify  // charge check
+// ✅ Project save/widget classes derive from reusable platformer shells
+class DRAGONSLAYER_API UDragonSlayerSaveGame : public UPlatformerSaveGame;
+class DRAGONSLAYER_API UDeveloperSettingsWidget : public UPlatformerDeveloperSettingsWidget;
 
-// ❌ Один God-AnimNotify з enum для типу
-```
-
-## Pattern 7: Blueprint hooks (C++ → BP)
-
-```cpp
-// ✅ BlueprintImplementableEvent для візуальних ефектів
-UFUNCTION(BlueprintImplementableEvent, Category="Combat")
-void DealtDamage(float Damage, const FVector& ImpactPoint);
-
-UFUNCTION(BlueprintImplementableEvent, Category="Combat")
-void ReceivedDamage(float Damage, const FVector& ImpactPoint, const FVector& DamageDirection);
-
-// ❌ Хардкод VFX/SFX в C++
+// ❌ Копіювати reusable save/widget implementation в Source замість наслідування
 ```
 
 ## Anti-Patterns
 
 | ❌ Не роби | ✅ Замість | ЧОМУ |
 |---|---|---|
-| Логіку Variant в base клас | Наслідуй і override | Масштабованість |
-| Hard ref на assets в C++ | BP derived + BlueprintImplementableEvent | Гнучкість |
-| BehaviorTree (в цьому проекті) | StateTree | Вибір архітектора |
-| God-class з усіма механіками | Interface + composition | Розв'язка |
-| Raw pointer без forward decl | Forward declaration в .h | Компіляція |
+| Generic platformer logic у `Source/DragonSlayer` | Винось у `Plugins/CookieBrosPlatformer` | Reuse |
+| Dragon-specific logic у плагін | Тримай у `Source/DragonSlayer` | Чисті межі |
+| Паралельний framework поруч з plugin shell | Наслідуй існуючі `Platformer*` base classes | Менше дублювання |
+| BehaviorTree (в цьому проекті) | StateTree | Узгодженість стеку |
+| Raw pointer без forward decl | Forward declaration в `.h` | Компіляція |

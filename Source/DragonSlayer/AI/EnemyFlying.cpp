@@ -1,7 +1,7 @@
 #include "AI/EnemyFlying.h"
 #include "GAS/Attributes/EnemyAttributeSet.h"
 
-AEnemyFlying::AEnemyFlying()
+AEnemyFlying::AEnemyFlying(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UEnemyAttributeSet>(APlatformerCombatCharacterBase::GetAttributeSetSubobjectName()))
 {
-	AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
 }

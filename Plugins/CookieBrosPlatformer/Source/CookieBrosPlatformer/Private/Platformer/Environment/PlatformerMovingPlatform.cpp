@@ -4,6 +4,7 @@
 
 #include "Components/ArrowComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "UObject/ConstructorHelpers.h"
@@ -46,6 +47,34 @@ APlatformerMovingPlatform::APlatformerMovingPlatform()
 	PointB = CreateDefaultSubobject<UArrowComponent>(TEXT("PointB"));
 	PointB->SetupAttachment(PointBLayoutRoot);
 	PointB->ArrowSize = 1.2f;
+
+#if WITH_EDITORONLY_DATA
+	MovementPathSpline = CreateEditorOnlyDefaultSubobject<USplineComponent>(TEXT("MovementPathSpline"));
+	if (MovementPathSpline)
+	{
+		MovementPathSpline->SetupAttachment(Root);
+		MovementPathSpline->SetClosedLoop(false);
+		MovementPathSpline->SetHiddenInGame(true);
+		MovementPathSpline->SetIsVisualizationComponent(true);
+		MovementPathSpline->bIsEditorOnly = true;
+	}
+
+	PointBPreviewMesh = CreateEditorOnlyDefaultSubobject<UStaticMeshComponent>(TEXT("PointBPreviewMesh"));
+	if (PointBPreviewMesh)
+	{
+		PointBPreviewMesh->SetupAttachment(PointBLayoutRoot);
+		PointBPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PointBPreviewMesh->SetHiddenInGame(true);
+		PointBPreviewMesh->SetIsVisualizationComponent(true);
+		PointBPreviewMesh->bIsEditorOnly = true;
+
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+		if (SphereMesh.Succeeded())
+		{
+			PointBPreviewMesh->SetStaticMesh(SphereMesh.Object);
+		}
+	}
+#endif
 }
 
 void APlatformerMovingPlatform::SetPlatformSize(const FVector& InPlatformSize)
@@ -74,6 +103,11 @@ void APlatformerMovingPlatform::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
+	RefreshMovingPlatformLayout();
+}
+
+void APlatformerMovingPlatform::RefreshMovingPlatformLayout()
+{
 	PlatformerEnvironment::ApplyRelativeTransform(
 		PlatformMeshLayoutRoot,
 		FVector(0.0f, 0.0f, PlatformSize.Z * 0.5f),
@@ -94,6 +128,10 @@ void APlatformerMovingPlatform::OnConstruction(const FTransform& Transform)
 		FRotator::ZeroRotator,
 		FVector::OneVector,
 		PointBTransformOffset);
+
+#if WITH_EDITORONLY_DATA
+	RefreshEditorPreviewComponents();
+#endif
 }
 
 void APlatformerMovingPlatform::PostLoad()
@@ -110,6 +148,62 @@ void APlatformerMovingPlatform::PostLoad()
 		PointBDelay = PointDelay;
 	}
 }
+
+#if WITH_EDITOR
+void APlatformerMovingPlatform::PostEditMove(bool bFinished)
+{
+	Super::PostEditMove(bFinished);
+
+	if (!bFinished)
+	{
+		return;
+	}
+
+	RebaseEditorPointAToActorLocation();
+	RefreshMovingPlatformLayout();
+}
+
+void APlatformerMovingPlatform::RebaseEditorPointAToActorLocation()
+{
+	if (PointABaseRelativeLocation.IsNearlyZero())
+	{
+		return;
+	}
+
+	Modify();
+	PointBBaseRelativeLocation -= PointABaseRelativeLocation;
+	PointABaseRelativeLocation = FVector::ZeroVector;
+}
+#endif
+
+#if WITH_EDITORONLY_DATA
+void APlatformerMovingPlatform::RefreshEditorPreviewComponents()
+{
+	if (PointBPreviewMesh)
+	{
+		PointBPreviewMesh->SetRelativeLocation(FVector::ZeroVector);
+		PointBPreviewMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		PointBPreviewMesh->SetRelativeScale3D(FVector(0.35f));
+	}
+
+	if (!MovementPathSpline)
+	{
+		return;
+	}
+
+	const FVector LocalPointA = PointALayoutRoot ? PointALayoutRoot->GetRelativeLocation() : PointABaseRelativeLocation;
+	const FVector LocalPointB = PointBLayoutRoot ? PointBLayoutRoot->GetRelativeLocation() : PointBBaseRelativeLocation;
+
+	TArray<FVector> SplinePoints;
+	SplinePoints.Add(LocalPointA);
+	SplinePoints.Add(LocalPointB);
+
+	MovementPathSpline->SetSplinePoints(SplinePoints, ESplineCoordinateSpace::Local, false);
+	MovementPathSpline->SetSplinePointType(0, ESplinePointType::Linear, false);
+	MovementPathSpline->SetSplinePointType(1, ESplinePointType::Linear, false);
+	MovementPathSpline->UpdateSpline();
+}
+#endif
 
 void APlatformerMovingPlatform::Tick(float DeltaTime)
 {

@@ -183,6 +183,21 @@ void APlatformerSoftPlatform::OnBottomCheckBeginOverlap(UPrimitiveComponent* Ove
 	if (ACharacter* Character = Cast<ACharacter>(OtherActor))
 	{
 		CharactersBelowPlatform.Add(Character);
+
+		if (IgnoredCharactersUntilTime.Contains(Character))
+		{
+			return;
+		}
+
+		if (const UCharacterMovementComponent* MovementComponent = Character->GetCharacterMovement())
+		{
+			// Enable one-way pass-through immediately on first contact from below, before the next Tick
+			// has a chance to lose the upward velocity due to blocking collision against the platform.
+			if (MovementComponent->Velocity.Z > 0.0f)
+			{
+				StartIgnoringCharacter(Character, JumpThroughIgnoreDuration, false);
+			}
+		}
 	}
 }
 

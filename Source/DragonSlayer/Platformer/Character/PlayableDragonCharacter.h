@@ -10,6 +10,10 @@ class UInputMappingContext;
 struct FInputActionValue;
 class UGameplayAbility;
 class APlatformerLadder;
+class UDragonFormComponent;
+class UPlatformerTraversalConfigDataAsset;
+class UPlatformerTraversalComponent;
+class UPlatformerTraversalMovementComponent;
 
 /**
  * APlayableDragonCharacter
@@ -28,7 +32,14 @@ protected:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void ApplyDeveloperCharacterSettings(const struct FDeveloperPlatformerCharacterSettings& DeveloperSettings) override;
+	virtual void ApplyDeveloperSettingsSnapshot(const struct FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot) override;
+	virtual FDeveloperPlatformerCharacterSettings CaptureDeveloperCharacterSettings() const override;
+	virtual FPlatformerDeveloperSettingsSnapshot CaptureDeveloperSettingsSnapshot() const override;
 	virtual void ApplyDeveloperCharacterMovementSettings(const struct FDeveloperPlatformerCharacterMovementSettings& DeveloperCharacterMovementSettings) override;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Traversal", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UPlatformerTraversalComponent> TraversalComponent;
 
 	// Enhanced Input setup
 	UPROPERTY(EditAnywhere, Category="Input")
@@ -52,11 +63,17 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Input|Combat")
 	TObjectPtr<UInputAction> ChargeShotAction;
 
+	UPROPERTY(EditAnywhere, Category="Input|Combat")
+	bool bUseUnifiedShotInput = true;
+
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> FlyAction;
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	TObjectPtr<UInputAction> GlideAction;
+
+	UPROPERTY(EditDefaultsOnly, Category="Traversal", meta=(DeprecatedProperty, DeprecationMessage="Use TraversalComponent.TraversalConfig"))
+	TObjectPtr<UPlatformerTraversalConfigDataAsset> TraversalConfig;
 
 	// Input Handlers
 	void Input_Move(const FInputActionValue& Value);
@@ -71,7 +88,21 @@ protected:
 	void Input_FlyToggle(const FInputActionValue& Value);
 	void Input_GlideStart(const FInputActionValue& Value);
 	void Input_GlideEnd(const FInputActionValue& Value);
+	TSubclassOf<UGameplayAbility> ResolveDashAbilityClass() const;
+	TSubclassOf<UGameplayAbility> ResolveBaseShotAbilityClass() const;
+	TSubclassOf<UGameplayAbility> ResolveChargeShotAbilityClass() const;
 	class USideViewMovementComponent* GetSideViewMovementComponent() const;
+	class UDragonFormComponent* GetDragonFormComponent() const;
+	UPlatformerTraversalComponent* GetTraversalComponent() const;
+	UPlatformerTraversalMovementComponent* GetTraversalMovementComponent() const;
+	void ApplyDeveloperChargeShotSettings(
+		const FPlatformerChargeShotTuning& DeveloperChargeShotSettings,
+		bool bHasSavedChargeShotSettings);
+	void ApplyDeveloperTraversalSettings(
+		const FPlatformerLedgeTraversalSettings& DeveloperLedgeSettings,
+		const FPlatformerSlideDashSettings& DeveloperSlideDashSettings,
+		const FPlatformerWallTraversalSettings& DeveloperWallSettings,
+		bool bHasSavedTraversalSettings);
 
 	// Abilities to grant on possession for testing purposes
 	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
@@ -94,6 +125,7 @@ protected:
 	bool bIsFlying;
 	bool bLadderClimbUpHeld = false;
 	bool bLadderClimbDownHeld = false;
+	bool bChargeShotInputHeld = false;
 	float DefaultGravityScale;
 	bool bHadPreGlideGravityOverride = false;
 	float PreGlideGravityOverride = 1.0f;

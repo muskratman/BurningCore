@@ -1,31 +1,25 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Combat/PlatformerCombatCharacterBase.h"
 #include "Developer/DeveloperPlatformerSettingsTypes.h"
-#include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "AbilitySystemInterface.h"
-#include "Interfaces/Damageable.h"
 #include "PlatformerCharacterBase.generated.h"
 
-class UAbilitySystemComponent;
 class UPlatformerAbilitySet;
-class UPlatformerCharacterAttributeSet;
 class USpringArmComponent;
 class UCameraComponent;
 class APlatformerLadder;
+class UDamageType;
 
 /**
  * APlatformerCharacterBase
- * Generic playable platformer shell with camera rig, side-view movement, and GAS bootstrap.
+ * Generic playable platformer shell with camera rig, side-view movement, and combat bootstrap.
  */
 UCLASS(Abstract)
-class COOKIEBROSPLATFORMER_API APlatformerCharacterBase : public ACharacter, public IAbilitySystemInterface, public IDamageable
+class COOKIEBROSPLATFORMER_API APlatformerCharacterBase : public APlatformerCombatCharacterBase
 {
 	GENERATED_BODY()
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities", meta=(AllowPrivateAccess="true"))
-	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -33,20 +27,11 @@ class COOKIEBROSPLATFORMER_API APlatformerCharacterBase : public ACharacter, pub
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UCameraComponent> FollowCamera;
 
-protected:
-	UPROPERTY()
-	TObjectPtr<UPlatformerCharacterAttributeSet> AttributeSet;
-
 	UPROPERTY(EditDefaultsOnly, Category="Abilities")
 	TObjectPtr<UPlatformerAbilitySet> DefaultAbilitySet;
 
 public:
 	APlatformerCharacterBase(const FObjectInitializer& ObjectInitializer);
-
-	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
-
-	virtual void ApplyDamage(const FGameplayEffectSpecHandle& DamageSpec, const FHitResult& HitResult) override;
-	virtual bool IsAlive() const override;
 
 	virtual void InitializeAbilities(const UPlatformerAbilitySet* AbilitySet);
 	virtual void NotifyLadderAvailable(APlatformerLadder* Ladder);
@@ -54,9 +39,10 @@ public:
 	virtual bool EnterLadder(APlatformerLadder* Ladder);
 	virtual void ExitLadder(APlatformerLadder* Ladder = nullptr);
 	virtual void ApplyDeveloperCharacterSettings(const FDeveloperPlatformerCharacterSettings& DeveloperSettings);
+	virtual void ApplyDeveloperSettingsSnapshot(const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot);
 	virtual FDeveloperPlatformerCharacterSettings CaptureDeveloperCharacterSettings() const;
+	virtual FPlatformerDeveloperSettingsSnapshot CaptureDeveloperSettingsSnapshot() const;
 
-	FORCEINLINE UPlatformerCharacterAttributeSet* GetPlatformerAttributeSet() const { return AttributeSet; }
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE bool IsOnLadder() const { return bIsOnLadder; }
@@ -69,6 +55,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void FellOutOfWorld(const UDamageType& DamageType) override;
+	virtual void OnCombatDeath(AActor* DamageInstigatorActor) override;
+	virtual void OnCombatRevived() override;
 	virtual void OnEnteredLadder(APlatformerLadder* Ladder);
 	virtual void OnExitedLadder(APlatformerLadder* Ladder);
 	virtual void ApplyDeveloperCameraSettings(const FDeveloperPlatformerCameraSettings& DeveloperCameraSettings);
@@ -77,6 +66,8 @@ protected:
 	virtual FDeveloperPlatformerCharacterMovementSettings CaptureDeveloperCharacterMovementSettings() const;
 	virtual void ApplyDeveloperCombatSettings(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings);
 	virtual FDeveloperPlatformerCombatSettings CaptureDeveloperCombatSettings() const;
+	virtual float GetHealthWidgetVerticalPadding() const override;
+	FDeveloperPlatformerCombatSettings ResolveDeveloperCombatSettingsForApplication(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings) const;
 	void LoadAndApplyDeveloperSettings();
 	void SetHasActiveDeveloperCombatSettings(bool bInHasActiveDeveloperCombatSettings);
 
@@ -106,4 +97,7 @@ protected:
 
 	UPROPERTY(Transient)
 	FDeveloperPlatformerCombatSettings ActiveDeveloperCombatSettings;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI", meta=(ClampMin=0.0, Units="cm"))
+	float PlatformerHealthWidgetVerticalPadding = 20.0f;
 };

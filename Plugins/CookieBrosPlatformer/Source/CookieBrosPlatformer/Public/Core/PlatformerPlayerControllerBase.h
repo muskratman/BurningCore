@@ -13,12 +13,15 @@ struct FInputActionValue;
 
 /**
  * Generic platformer player controller shell with Enhanced Input setup, touch controls,
- * respawn handling, and an overridable pause hook.
+ * optional legacy respawn handling, and overridable pause/defeat hooks.
  */
 UCLASS(Config="Game", Abstract)
 class COOKIEBROSPLATFORMER_API APlatformerPlayerControllerBase : public APlayerController
 {
 	GENERATED_BODY()
+
+public:
+	virtual void HandleControlledCharacterDeath();
 
 protected:
 	UPROPERTY(EditAnywhere, Category="Input|Input Mappings")
@@ -38,6 +41,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Respawn")
 	TSubclassOf<APawn> RespawnPawnClass;
+
+	UPROPERTY(EditAnywhere, Category="Respawn")
+	bool bAutoRespawnOnPawnDestroyed = false;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input|Input Mappings")
 	TObjectPtr<UInputAction> TogglePauseAction;

@@ -14,5 +14,5 @@ class COOKIEBROSPLATFORMER_API APlatformerEnemyFlying : public APlatformerEnemyB
 	GENERATED_BODY()
 
 public:
-	APlatformerEnemyFlying();
+	APlatformerEnemyFlying(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

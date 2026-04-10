@@ -4,10 +4,8 @@
 #include "GAS/Attributes/DragonAttributeSet.h"
 
 ADragonCharacter::ADragonCharacter(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDragonAttributeSet>(APlatformerCombatCharacterBase::GetAttributeSetSubobjectName()))
 {
-	AttributeSet = CreateDefaultSubobject<UDragonAttributeSet>(TEXT("AttributeSet"));
-
 	FormComponent = CreateDefaultSubobject<UDragonFormComponent>(TEXT("FormComponent"));
 	OverdriveComponent = CreateDefaultSubobject<UDragonOverdriveComponent>(TEXT("OverdriveComponent"));
 }

@@ -1,38 +1,36 @@
 #include "Core/SaveGame/SaveDeveloperSettings.h"
 
-#include "Kismet/GameplayStatics.h"
-
 namespace
 {
-const FString DeveloperSaveSlotName = TEXT("SaveDeveloperSettings_1");
-constexpr int32 DeveloperSaveUserIndex = 0;
+constexpr int32 DeveloperSettingsSnapshotDataVersion = 1;
 }
 
-USaveDeveloperSettings* USaveDeveloperSettings::LoadDeveloperSettingsFromSlot(const UObject* DeveloperWorldContextObject)
+void USaveDeveloperSettings::SetSnapshot(const FPlatformerDeveloperSettingsSnapshot& InSnapshot)
 {
-	(void)DeveloperWorldContextObject;
+	DataVersion = DeveloperSettingsSnapshotDataVersion;
+	Snapshot = InSnapshot;
+	DeveloperCharacterSettings = InSnapshot.CharacterSettings;
+	DeveloperCameraManagerSettings = InSnapshot.CameraManagerSettings;
+	bHasSavedDeveloperCombatSettings = InSnapshot.bHasSavedCombatSettings;
+	bAutoRestartLevel = InSnapshot.bAutoRestartLevel;
+}
 
-	if (!UGameplayStatics::DoesSaveGameExist(DeveloperSaveSlotName, DeveloperSaveUserIndex))
+FPlatformerDeveloperSettingsSnapshot USaveDeveloperSettings::ResolveSnapshot() const
+{
+	if (UsesSnapshotData())
 	{
-		return nullptr;
+		return Snapshot;
 	}
 
-	return Cast<USaveDeveloperSettings>(UGameplayStatics::LoadGameFromSlot(DeveloperSaveSlotName, DeveloperSaveUserIndex));
+	FPlatformerDeveloperSettingsSnapshot LegacySnapshot;
+	LegacySnapshot.CharacterSettings = DeveloperCharacterSettings;
+	LegacySnapshot.CameraManagerSettings = DeveloperCameraManagerSettings;
+	LegacySnapshot.bHasSavedCombatSettings = bHasSavedDeveloperCombatSettings;
+	LegacySnapshot.bAutoRestartLevel = bAutoRestartLevel;
+	return LegacySnapshot;
 }
 
-USaveDeveloperSettings* USaveDeveloperSettings::LoadOrCreateDeveloperSettings(const UObject* DeveloperWorldContextObject)
+bool USaveDeveloperSettings::UsesSnapshotData() const
 {
-	if (USaveDeveloperSettings* LoadedDeveloperSave = LoadDeveloperSettingsFromSlot(DeveloperWorldContextObject))
-	{
-		return LoadedDeveloperSave;
-	}
-
-	return Cast<USaveDeveloperSettings>(UGameplayStatics::CreateSaveGameObject(StaticClass()));
-}
-
-bool USaveDeveloperSettings::WriteDeveloperSettingsToSlot(const UObject* DeveloperWorldContextObject, USaveDeveloperSettings* DeveloperSaveObject)
-{
-	(void)DeveloperWorldContextObject;
-	return DeveloperSaveObject != nullptr
-		&& UGameplayStatics::SaveGameToSlot(DeveloperSaveObject, DeveloperSaveSlotName, DeveloperSaveUserIndex);
+	return DataVersion >= DeveloperSettingsSnapshotDataVersion;
 }

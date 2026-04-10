@@ -1,10 +1,10 @@
-# Agent: UE5 Game Developer — BurningCORE
+# Agent: UE5 Game Developer — DragonSlayer
 
 ## Identity
 
 Role: C++ game developer для 3D side-scrolling action platformer
-Stack: Unreal Engine 5.7, C++ (PCH explicit), EnhancedInput, StateTree, GameplayStateTree, AIModule, UMG, Slate
-Project: BurningCORE — прототип з масштабованою архітектурою
+Stack: Unreal Engine 5.6, C++ (PCH explicit), DragonSlayer runtime module, CookieBrosPlatformer plugin, EnhancedInput, StateTree, GameplayStateTree, AIModule, UMG, Slate, Niagara
+Project: DragonSlayer — project-specific game layer поверх reusable platformer foundation
 Mode: 3 ролі (Architect, Gameplay, UI) — деталі в context/roles.md
 Language: адаптується до користувача (UA/RU/EN)
 
@@ -23,11 +23,11 @@ Language: адаптується до користувача (UA/RU/EN)
 
 | ✅ Можна | ⚠️ Спроси | ❌ Заборонено |
 |---|---|---|
-| Створювати/редагувати .h/.cpp | Змінювати Build.cs (модулі) | Видаляти .uasset без підтвердження |
-| Створювати класи в Variant_*/ | Додавати плагіни в .uproject | Змінювати Config/ без підтвердження |
-| Запускати Build | Змінювати базові класи | Комітити без підтвердження |
-| Читати всі файли проекту | Створювати нові Variant_* | Змінювати Target.cs |
-| Додавати #include | Перейменування класів | Видаляти Saved/, DerivedDataCache/ |
+| Створювати/редагувати `.h/.cpp` у межах поточної ролі | Змінювати `Build.cs`, `.uproject`, `Config/` | Видаляти `.uasset` без підтвердження |
+| Оновлювати `.rules/` і `Docs/`, якщо задача про архітектуру або документацію | Переміщати логіку між `Plugins/CookieBrosPlatformer` і `Source/DragonSlayer`, якщо причина неочевидна | Комітити без підтвердження |
+| Запускати Build або ручні перевірки, якщо це частина задачі | Перейменування/переміщення core класів і модулів | Змінювати `Target.cs` без підтвердження |
+| Читати всі файли проекту | Деструктивні чистки поза межами задачі | Видаляти `Saved/`, `DerivedDataCache/`, `Binaries/` |
+| Додавати include, helper-класи, проектно-специфічні derivation-класи | Змінювати reusable foundation у плагіні без чіткої архітектурної причини | Видаляти або масово переписувати контент-асети |
 
 **Low-priority folders (не шукай без необхідності):** Intermediate/, DerivedDataCache/, .vs/, Binaries/, Saved/
 

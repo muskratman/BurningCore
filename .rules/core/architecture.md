@@ -1,43 +1,52 @@
-# Architecture: BurningCORE
+# Architecture: DragonSlayer
 
 ## Project Shape
 
-3D side-scrolling action platformer з production-first архітектурою.
-Єдиний C++ модуль `BurningCORE` з core/gameplay шарами та legacy variant-слідами.
-Production path проходить через `Core + Character + GAS + AI + Systems + Platformer`.
+DragonSlayer — 3D side-scrolling action platformer на Unreal Engine 5.6.
+Архітектура двошарова:
 
-## Production Structure
+- `Plugins/CookieBrosPlatformer` — reusable platformer foundation
+- `Source/DragonSlayer` — project-specific gameplay, progression, UI і Dragon контент
+
+Production path проходить через reusable shell у плагіні та конкретну реалізацію в модулі `DragonSlayer`.
+
+## Runtime Structure
 
 ```
-Source/BurningCORE/
-├── BurningCOREGameMode     ← abstract base GameMode
-├── BurningCOREPlayerController ← abstract base Controller
-├── Platformer/
-│   ├── Character/          ← production pawn + platformer interaction contracts
-│   └── Environment/        ← moving platforms, pickups, jump pads, soft platforms
-├── UI/                     ← runtime gameplay UI + pause menu
-├── Platformer/Base/        ← platformer shell: mode + controller
-└── Platformer/Camera/      ← platformer camera shell
+DragonSlayer.uproject
+├── EngineAssociation = 5.6
+├── Runtime module: Source/DragonSlayer/
+└── Plugin: Plugins/CookieBrosPlatformer/
+    ├── CookieBrosPlatformer      ← reusable runtime mechanics
+    └── CookieBrosLevelEditor     ← editor/import tooling
 ```
 
-## Layers
+## Ownership Split
 
-| Шар | Відповідальність |
+| Зона | Що тут живе |
 |---|---|
-| **Core** | GameMode, shared controller, game state, save/load |
-| **Character** | ADragonCharacter, form/overdrive components, side-view movement |
-| **Platformer** | PlayableDragonCharacter, platformer interaction contracts, environment actors |
-| **AI** | StateTree, GameplayStateTree, EQS contexts, AIController |
-| **Gameplay** | checkpoints, interactables, environment actors |
-| **Interfaces** | UE5 interfaces (UINTERFACE): IDamageable, IInteractable, platformer interaction contracts |
-| **Animation** | AnimNotify (не AnimBP — BP-only) |
-| **UI** | UMG widgets (C++ base + BP layout) |
+| **Plugins/CookieBrosPlatformer** | Generic platformer classes: `APlatformerGameModeBase`, `APlatformerPlayerControllerBase`, `APlatformerCharacterBase`, `APlatformerEnemyBase`, traversal, environment actors, camera manager, save shell, developer widgets, interfaces |
+| **Source/DragonSlayer/Core** | Project-local framework glue: `UDragonSlayerGameInstance`, main menu flow, HUD, developer settings |
+| **Source/DragonSlayer/Character** | `ADragonCharacter`, forms, overdrive, hero-specific components |
+| **Source/DragonSlayer/GAS + Data** | Dragon-specific abilities, attributes, effects, data assets |
+| **Source/DragonSlayer/AI + Projectiles** | Concrete enemies, bosses, projectiles built on platformer shells |
+| **Source/DragonSlayer/Systems** | `UDragonSlayerSaveGame`, checkpoints, progression state |
+| **Source/DragonSlayer/Platformer** | Production glue for current game flow: `APlatformerGameMode`, `APlatformerPlayerController`, `APlayableDragonCharacter` |
+| **Source/DragonSlayer/UI + Core/UI** | Game-specific runtime HUD, pause menu, main menu, widgets derived from reusable UI shells |
 
 ## Key Decisions
 
-- **Production-first layering** — gameplay будується навколо `ADragonCharacter`, `AEnemyBase` і `Platformer/*`. ЧОМУ: менше дублювання та один активний production path.
-- **Interfaces замість hard dependencies** — слабка зв'язність між character/environment/UI шарами. ЧОМУ: простіше підтримувати shell та gameplay окремо.
-- **EnhancedInput** з Do*() паттерном (Move→DoMove, Look→DoLook). ЧОМУ: дозволяє UI та AI викликати ту ж логіку без InputAction.
-- **StateTree для AI** замість BehaviorTree. ЧОМУ: вибір розробника для UE 5.7+.
-- **C++ base + BP derived** для Characters та UI. ЧОМУ: логіка в C++ для агента, візуали/ассети в BP.
-- **PublicIncludePaths** перераховані в Build.cs. ЧОМУ: flat includes між варіантами.
+- **Reusable platformer foundation у плагіні** — будь-яка механіка без DragonSlayer-специфіки має жити в `CookieBrosPlatformer`. ЧОМУ: це база для платформерів, а не тільки для цього проекту.
+- **Project-specific logic у `Source/DragonSlayer`** — усе, що знає про Dragon, Overdrive, форми, конкретну прогресію, HUD або проектні data assets, залишається в модулі проекту. ЧОМУ: не засмічує reusable layer.
+- **Inheritance поверх плагіна** — проект розширює shell-класи замість копіювання: `ADragonCharacter : APlatformerCharacterBase`, `UDragonSlayerSaveGame : UPlatformerSaveGame`, `AEnemyMelee : APlatformerEnemyMelee`. ЧОМУ: мінімум дублювання.
+- **Interfaces + GAS + DataAssets** — зв'язки між combat, AI, projectiles і environment проходять через інтерфейси та data-driven конфігурацію. ЧОМУ: слабка зв'язність і простіше тюнити.
+- **StateTree для AI** — базовий підхід для проекту на UE 5.6. ЧОМУ: узгоджено з поточним стеком.
+- **C++ base + Blueprint derived** — системна логіка в C++, ассети і presentation у BP/UMG. ЧОМУ: зручно для агента і production pipeline.
+
+## Placement Rule
+
+Перед додаванням нового коду завжди перевір:
+
+1. Якщо це generic platformer mechanic, reusable widget, save shell, traversal, environment actor або camera/controller shell → `Plugins/CookieBrosPlatformer`.
+2. Якщо це DragonSlayer-specific hero logic, enemy flavour, progression, HUD, menu, save payload або сюжетний/контентний glue → `Source/DragonSlayer`.
+3. Якщо зміна зачіпає обидві сторони одночасно, рішення належить Architect.

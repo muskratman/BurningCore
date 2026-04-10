@@ -6,6 +6,7 @@
 
 class UPauseWidget;
 class UDeveloperSettingsWidget;
+class UPlatformerDefeatWidget;
 
 UCLASS()
 class DRAGONSLAYER_API ADragonSlayerHUD : public AHUD
@@ -33,6 +34,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void HideDeveloperSettingsWidget();
 
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void ShowDefeatWidget();
+
+	UFUNCTION(BlueprintCallable, Category = "UI")
+	void HideDefeatWidget();
+
 protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UPauseWidget> PauseWidgetClass;
@@ -40,10 +47,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "UI")
 	TSubclassOf<UDeveloperSettingsWidget> DeveloperSettingsWidgetClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "UI")
+	TSubclassOf<UPlatformerDefeatWidget> DefeatWidgetClass;
+
 private:
 	UPROPERTY()
 	TObjectPtr<UPauseWidget> PauseWidgetInstance;
 
 	UPROPERTY()
 	TObjectPtr<UDeveloperSettingsWidget> DeveloperSettingsWidgetInstance;
+
+	UPROPERTY()
+	TObjectPtr<UPlatformerDefeatWidget> DefeatWidgetInstance;
 };

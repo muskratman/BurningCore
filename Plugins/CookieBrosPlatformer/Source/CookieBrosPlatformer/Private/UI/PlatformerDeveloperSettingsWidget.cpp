@@ -2,44 +2,105 @@
 
 #include "Character/PlatformerCharacterBase.h"
 #include "Components/Button.h"
-#include "Core/SaveGame/SaveDeveloperSettings.h"
-#include "Developer/DeveloperPlatformerSettingsTypes.h"
+#include "Components/EditableTextBox.h"
+#include "Components/TextBlock.h"
+#include "Core/PlatformerDeveloperSettingsSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
 #include "Platformer/Camera/PlatformerCameraManager.h"
+#include "UI/DeveloperCheckboxWidget.h"
 #include "UI/DeveloperParameterWidget.h"
 #include "UI/DeveloperVectorWidget.h"
 
+namespace
+{
+float ResolveDeveloperPartialAttackDamage(
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings,
+	const FPlatformerChargeShotTuning& DeveloperChargeShotSettings)
+{
+	const float BaseAttackDamage = FMath::Max(DeveloperCombatSettings.DeveloperCombatRangeBaseAttackDamage, 0.0f);
+	const float FullChargeDamage = FMath::Max(DeveloperCombatSettings.DeveloperCombatRangeChargedAttackDamage, 0.0f);
+	const float RawPartialDamage = BaseAttackDamage * FMath::Max(DeveloperChargeShotSettings.PartialDamageMultiplier, 1.0f);
+	if (FullChargeDamage > 0.0f)
+	{
+		return FMath::Clamp(
+			RawPartialDamage,
+			BaseAttackDamage,
+			FMath::Max(BaseAttackDamage, FullChargeDamage - KINDA_SMALL_NUMBER));
+	}
+
+	return RawPartialDamage;
+}
+
+float ResolveDeveloperPartialAttackSpeed(
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings,
+	const FPlatformerChargeShotTuning& DeveloperChargeShotSettings)
+{
+	const float ChargedAttackSpeed = FMath::Max(DeveloperCombatSettings.DeveloperCombatRangeChargedAttackSpeed, 0.0f);
+	return ChargedAttackSpeed * FMath::Max(DeveloperChargeShotSettings.PartialProjectileSpeedMultiplier, 0.0f);
+}
+
+float ResolveDeveloperPartialDamageMultiplierFromDisplay(
+	float PartialAttackDamage,
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings,
+	const FPlatformerChargeShotTuning& BaseDeveloperChargeShotSettings)
+{
+	const float BaseAttackDamage = FMath::Max(DeveloperCombatSettings.DeveloperCombatRangeBaseAttackDamage, 0.0f);
+	if (BaseAttackDamage <= KINDA_SMALL_NUMBER)
+	{
+		return BaseDeveloperChargeShotSettings.PartialDamageMultiplier;
+	}
+
+	return FMath::Max(PartialAttackDamage / BaseAttackDamage, 1.0f);
+}
+
+float ResolveDeveloperPartialSpeedMultiplierFromDisplay(
+	float PartialAttackSpeed,
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings,
+	const FPlatformerChargeShotTuning& BaseDeveloperChargeShotSettings)
+{
+	const float ChargedAttackSpeed = FMath::Max(DeveloperCombatSettings.DeveloperCombatRangeChargedAttackSpeed, 0.0f);
+	if (ChargedAttackSpeed <= KINDA_SMALL_NUMBER)
+	{
+		return BaseDeveloperChargeShotSettings.PartialProjectileSpeedMultiplier;
+	}
+
+	return FMath::Max(PartialAttackSpeed / ChargedAttackSpeed, 0.0f);
+}
+}
+
 void UPlatformerDeveloperSettingsWidget::RefreshDeveloperSettingsWidget()
 {
-	if (USaveDeveloperSettings* LoadedDeveloperSettings = USaveDeveloperSettings::LoadDeveloperSettingsFromSlot(this))
+	if (UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem())
 	{
-		LoadDeveloperCharacterSettingsIntoWidgets(LoadedDeveloperSettings->DeveloperCharacterSettings);
-		if (LoadedDeveloperSettings->bHasSavedDeveloperCombatSettings)
+		FPlatformerDeveloperSettingsSnapshot SavedSnapshot;
+		if (DeveloperSettingsSubsystem->TryLoadCurrentSnapshot(SavedSnapshot))
 		{
-			LoadDeveloperCombatSettingsIntoWidgets(LoadedDeveloperSettings->DeveloperCharacterSettings.DeveloperCombatSettings);
+			WorkingCopy = SavedSnapshot;
 		}
-		else if (APlatformerCharacterBase* DeveloperTargetCharacter = GetDeveloperTargetCharacter())
+		else
 		{
-			LoadDeveloperCombatSettingsIntoWidgets(DeveloperTargetCharacter->CaptureDeveloperCharacterSettings().DeveloperCombatSettings);
+			WorkingCopy = CaptureDeveloperSettingsSnapshotFromRuntime();
 		}
-		LoadDeveloperCameraManagerSettingsIntoWidgets(LoadedDeveloperSettings->DeveloperCameraManagerSettings);
-		return;
+	}
+	else
+	{
+		WorkingCopy = CaptureDeveloperSettingsSnapshotFromRuntime();
 	}
 
-	if (APlatformerCharacterBase* DeveloperTargetCharacter = GetDeveloperTargetCharacter())
-	{
-		LoadDeveloperCharacterSettingsIntoWidgets(DeveloperTargetCharacter->CaptureDeveloperCharacterSettings());
-	}
-
-	if (APlatformerCameraManager* DeveloperTargetCameraManager = GetDeveloperTargetCameraManager())
-	{
-		LoadDeveloperCameraManagerSettingsIntoWidgets(DeveloperTargetCameraManager->CaptureDeveloperCameraManagerSettings());
-	}
+	LoadDeveloperSettingsSnapshotIntoWidgets(WorkingCopy);
+	RefreshDeveloperSlotWidgets();
 }
 
 void UPlatformerDeveloperSettingsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (Common_AutoRestartLevel)
+	{
+		Common_AutoRestartLevel->SetParameterName(INVTEXT("Auto Restart Level"));
+	}
+
 	RefreshDeveloperSettingsWidget();
 }
 
@@ -52,10 +113,76 @@ void UPlatformerDeveloperSettingsWidget::NativeOnInitialized()
 		Butt_Save->OnClicked.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveClicked);
 	}
 
+	if (Butt_SaveAs)
+	{
+		Butt_SaveAs->OnClicked.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveAsClicked);
+	}
+
+	if (Butt_Load)
+	{
+		Butt_Load->OnClicked.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperLoadClicked);
+	}
+
+	if (Butt_Delete)
+	{
+		Butt_Delete->OnClicked.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperDeleteClicked);
+	}
+
 	if (Butt_Close)
 	{
 		Butt_Close->OnClicked.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperCloseClicked);
 	}
+
+	if (Combo_Slots)
+	{
+		Combo_Slots->OnSelectionChanged.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperSlotSelectionChanged);
+	}
+
+	if (Editable_SlotName)
+	{
+		Editable_SlotName->OnTextChanged.AddDynamic(this, &UPlatformerDeveloperSettingsWidget::HandleDeveloperSlotNameChanged);
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperSettingsSnapshotIntoWidgets(
+	const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot)
+{
+	if (Common_AutoRestartLevel)
+	{
+		Common_AutoRestartLevel->SetCheckboxValue(DeveloperSettingsSnapshot.bAutoRestartLevel);
+	}
+
+	FDeveloperPlatformerCharacterSettings ResolvedCharacterSettings = DeveloperSettingsSnapshot.CharacterSettings;
+	const bool bNeedsRuntimeCharacterFallback =
+		!DeveloperSettingsSnapshot.bHasSavedCombatSettings
+		|| !DeveloperSettingsSnapshot.bHasSavedChargeShotSettings
+		|| !DeveloperSettingsSnapshot.bHasSavedTraversalSettings;
+
+	if (bNeedsRuntimeCharacterFallback)
+	{
+		const FDeveloperPlatformerCharacterSettings RuntimeCharacterSettings = CaptureDeveloperSettingsSnapshotFromRuntime().CharacterSettings;
+
+		if (!DeveloperSettingsSnapshot.bHasSavedCombatSettings)
+		{
+			ResolvedCharacterSettings.DeveloperCombatSettings = RuntimeCharacterSettings.DeveloperCombatSettings;
+		}
+
+		if (!DeveloperSettingsSnapshot.bHasSavedChargeShotSettings)
+		{
+			ResolvedCharacterSettings.DeveloperChargeShotSettings = RuntimeCharacterSettings.DeveloperChargeShotSettings;
+		}
+
+		if (!DeveloperSettingsSnapshot.bHasSavedTraversalSettings)
+		{
+			ResolvedCharacterSettings.DeveloperLedgeSettings = RuntimeCharacterSettings.DeveloperLedgeSettings;
+			ResolvedCharacterSettings.DeveloperSlideDashSettings = RuntimeCharacterSettings.DeveloperSlideDashSettings;
+			ResolvedCharacterSettings.DeveloperWallSettings = RuntimeCharacterSettings.DeveloperWallSettings;
+		}
+	}
+
+	WorkingCopy.CharacterSettings = ResolvedCharacterSettings;
+	LoadDeveloperCharacterSettingsIntoWidgets(ResolvedCharacterSettings);
+	LoadDeveloperCameraManagerSettingsIntoWidgets(DeveloperSettingsSnapshot.CameraManagerSettings);
 }
 
 void UPlatformerDeveloperSettingsWidget::LoadDeveloperCharacterSettingsIntoWidgets(const FDeveloperPlatformerCharacterSettings& DeveloperSettings)
@@ -92,9 +219,17 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperCharacterSettingsIntoWidge
 
 	LoadDeveloperMovementSettingsIntoWidgets(DeveloperSettings.DeveloperCharacterMovementSettings);
 	LoadDeveloperCombatSettingsIntoWidgets(DeveloperSettings.DeveloperCombatSettings);
+	LoadDeveloperChargeShotSettingsIntoWidgets(
+		DeveloperSettings.DeveloperChargeShotSettings,
+		DeveloperSettings.DeveloperCombatSettings);
+	LoadDeveloperTraversalSettingsIntoWidgets(
+		DeveloperSettings.DeveloperLedgeSettings,
+		DeveloperSettings.DeveloperSlideDashSettings,
+		DeveloperSettings.DeveloperWallSettings);
 }
 
-void UPlatformerDeveloperSettingsWidget::LoadDeveloperCameraManagerSettingsIntoWidgets(const FDeveloperPlatformerCameraManagerSettings& DeveloperCameraManagerSettings)
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperCameraManagerSettingsIntoWidgets(
+	const FDeveloperPlatformerCameraManagerSettings& DeveloperCameraManagerSettings)
 {
 	if (CameraManager_IdleSpeedThreshold)
 	{
@@ -108,12 +243,14 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperCameraManagerSettingsIntoW
 
 	if (CameraManager_HOffsetInterpSpeedStart)
 	{
-		CameraManager_HOffsetInterpSpeedStart->SetParameterValue(DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart);
+		CameraManager_HOffsetInterpSpeedStart->SetParameterValue(
+			DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart);
 	}
 
 	if (CameraManager_HOffsetInterpSpeedEnd)
 	{
-		CameraManager_HOffsetInterpSpeedEnd->SetParameterValue(DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd);
+		CameraManager_HOffsetInterpSpeedEnd->SetParameterValue(
+			DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd);
 	}
 
 	if (CameraManager_VOffset)
@@ -123,11 +260,13 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperCameraManagerSettingsIntoW
 
 	if (CameraManager_VOffsetInterpSpeed)
 	{
-		CameraManager_VOffsetInterpSpeed->SetParameterValue(DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed);
+		CameraManager_VOffsetInterpSpeed->SetParameterValue(
+			DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed);
 	}
 }
 
-void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidgets(const FDeveloperPlatformerCharacterMovementSettings& DeveloperCharacterMovementSettings)
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidgets(
+	const FDeveloperPlatformerCharacterMovementSettings& DeveloperCharacterMovementSettings)
 {
 	if (Movement_MaxWalkSpeed)
 	{
@@ -146,7 +285,8 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidget
 
 	if (Movement_BrakingDecelerationWalking)
 	{
-		Movement_BrakingDecelerationWalking->SetParameterValue(DeveloperCharacterMovementSettings.DeveloperMovementBrakingDecelerationWalking);
+		Movement_BrakingDecelerationWalking->SetParameterValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementBrakingDecelerationWalking);
 	}
 
 	if (Movement_JumpZVelocity)
@@ -156,7 +296,8 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidget
 
 	if (Movement_JumpApexGravityMultiplier)
 	{
-		Movement_JumpApexGravityMultiplier->SetParameterValue(DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier);
+		Movement_JumpApexGravityMultiplier->SetParameterValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier);
 	}
 
 	if (Movement_GravityScale)
@@ -171,7 +312,8 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidget
 
 	if (Movement_BrakingFrictionFactor)
 	{
-		Movement_BrakingFrictionFactor->SetParameterValue(DeveloperCharacterMovementSettings.DeveloperMovementBrakingFrictionFactor);
+		Movement_BrakingFrictionFactor->SetParameterValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementBrakingFrictionFactor);
 	}
 
 	if (Movement_GroundFriction)
@@ -185,7 +327,8 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidget
 	}
 }
 
-void UPlatformerDeveloperSettingsWidget::LoadDeveloperCombatSettingsIntoWidgets(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings)
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperCombatSettingsIntoWidgets(
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings)
 {
 	if (Combat_MaxHealth)
 	{
@@ -233,9 +376,206 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperCombatSettingsIntoWidgets(
 	}
 }
 
-FDeveloperPlatformerCharacterSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCharacterSettingsFromWidgets() const
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperChargeShotSettingsIntoWidgets(
+	const FPlatformerChargeShotTuning& DeveloperChargeShotSettings,
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings)
 {
-	FDeveloperPlatformerCharacterSettings DeveloperSettings;
+	if (Combat_RangePartialAttackDamage)
+	{
+		Combat_RangePartialAttackDamage->SetParameterValue(
+			ResolveDeveloperPartialAttackDamage(DeveloperCombatSettings, DeveloperChargeShotSettings));
+	}
+
+	if (Combat_RangePartialAttackSpeed)
+	{
+		Combat_RangePartialAttackSpeed->SetParameterValue(
+			ResolveDeveloperPartialAttackSpeed(DeveloperCombatSettings, DeveloperChargeShotSettings));
+	}
+
+	if (Combat_PartialChargeTime)
+	{
+		Combat_PartialChargeTime->SetParameterValue(DeveloperChargeShotSettings.PartialChargeTime);
+	}
+
+	if (Combat_FullChargeTime)
+	{
+		Combat_FullChargeTime->SetParameterValue(DeveloperChargeShotSettings.FullChargeTime);
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::LoadDeveloperTraversalSettingsIntoWidgets(
+	const FPlatformerLedgeTraversalSettings& DeveloperLedgeSettings,
+	const FPlatformerSlideDashSettings& DeveloperSlideDashSettings,
+	const FPlatformerWallTraversalSettings& DeveloperWallSettings)
+{
+	if (Ledge_DetectionDistance)
+	{
+		Ledge_DetectionDistance->SetParameterValue(DeveloperLedgeSettings.DetectionDistance);
+	}
+
+	if (Ledge_MaxReachHeight)
+	{
+		Ledge_MaxReachHeight->SetParameterValue(DeveloperLedgeSettings.MaxReachHeight);
+	}
+
+	if (Ledge_MinHangHeight)
+	{
+		Ledge_MinHangHeight->SetParameterValue(DeveloperLedgeSettings.MinHangHeight);
+	}
+
+	if (Ledge_ForwardProbeRadius)
+	{
+		Ledge_ForwardProbeRadius->SetParameterValue(DeveloperLedgeSettings.ForwardProbeRadius);
+	}
+
+	if (Ledge_TopSurfaceForwardOffset)
+	{
+		Ledge_TopSurfaceForwardOffset->SetParameterValue(DeveloperLedgeSettings.TopSurfaceProbeForwardOffset);
+	}
+
+	if (Ledge_HangForwardOffset)
+	{
+		Ledge_HangForwardOffset->SetParameterValue(DeveloperLedgeSettings.HangForwardOffset);
+	}
+
+	if (Ledge_HangVerticalOffset)
+	{
+		Ledge_HangVerticalOffset->SetParameterValue(DeveloperLedgeSettings.HangVerticalOffset);
+	}
+
+	if (Ledge_ClimbSpeed)
+	{
+		Ledge_ClimbSpeed->SetParameterValue(DeveloperLedgeSettings.ClimbSpeed);
+	}
+
+	if (Ledge_ForgivenessWindow)
+	{
+		Ledge_ForgivenessWindow->SetParameterValue(DeveloperLedgeSettings.ForgivenessWindow);
+	}
+
+	if (Ledge_RegrabCooldown)
+	{
+		Ledge_RegrabCooldown->SetParameterValue(DeveloperLedgeSettings.RegrabCooldown);
+	}
+
+	if (Dash_DashSpeed)
+	{
+		Dash_DashSpeed->SetParameterValue(DeveloperSlideDashSettings.DashSpeed);
+	}
+
+	if (Dash_DashDistance)
+	{
+		Dash_DashDistance->SetParameterValue(DeveloperSlideDashSettings.DashDistance);
+	}
+
+	if (Dash_DashDuration)
+	{
+		Dash_DashDuration->SetParameterValue(DeveloperSlideDashSettings.DashDuration);
+	}
+
+	if (Dash_DashRecovery)
+	{
+		Dash_DashRecovery->SetParameterValue(DeveloperSlideDashSettings.DashRecovery);
+	}
+
+	if (Dash_DashHitboxScale)
+	{
+		Dash_DashHitboxScale->SetParameterValue(DeveloperSlideDashSettings.DashHitboxScale);
+	}
+
+	if (Wall_ProbeDistance)
+	{
+		Wall_ProbeDistance->SetParameterValue(DeveloperWallSettings.ProbeDistance);
+	}
+
+	if (Wall_ProbeHeightOffset)
+	{
+		Wall_ProbeHeightOffset->SetParameterValue(DeveloperWallSettings.ProbeHeightOffset);
+	}
+
+	if (Wall_SlideSpeed)
+	{
+		Wall_SlideSpeed->SetParameterValue(DeveloperWallSettings.SlideSpeed);
+	}
+
+	if (Wall_WallJumpForce)
+	{
+		Wall_WallJumpForce->SetParameterValue(DeveloperWallSettings.WallJumpForce);
+	}
+
+	if (Wall_WallJumpAngleDegrees)
+	{
+		Wall_WallJumpAngleDegrees->SetParameterValue(DeveloperWallSettings.WallJumpAngleDegrees);
+	}
+
+	if (Wall_ClingTime)
+	{
+		Wall_ClingTime->SetParameterValue(DeveloperWallSettings.ClingTime);
+	}
+
+	if (Wall_SameWallReattachCooldown)
+	{
+		Wall_SameWallReattachCooldown->SetParameterValue(DeveloperWallSettings.SameWallReattachCooldown);
+	}
+
+	if (Wall_MinFallSpeedForSlide)
+	{
+		Wall_MinFallSpeedForSlide->SetParameterValue(DeveloperWallSettings.MinFallSpeedForSlide);
+	}
+}
+
+FPlatformerDeveloperSettingsSnapshot UPlatformerDeveloperSettingsWidget::CaptureDeveloperSettingsSnapshotFromRuntime() const
+{
+	FPlatformerDeveloperSettingsSnapshot DeveloperSettingsSnapshot;
+
+	if (APlatformerCharacterBase* DeveloperTargetCharacter = GetDeveloperTargetCharacter())
+	{
+		DeveloperSettingsSnapshot = DeveloperTargetCharacter->CaptureDeveloperSettingsSnapshot();
+	}
+
+	if (APlatformerCameraManager* DeveloperTargetCameraManager = GetDeveloperTargetCameraManager())
+	{
+		DeveloperSettingsSnapshot.CameraManagerSettings = DeveloperTargetCameraManager->CaptureDeveloperCameraManagerSettings();
+	}
+
+	if (Common_AutoRestartLevel)
+	{
+		DeveloperSettingsSnapshot.bAutoRestartLevel = Common_AutoRestartLevel->GetCheckboxValue();
+	}
+
+	return DeveloperSettingsSnapshot;
+}
+
+void UPlatformerDeveloperSettingsWidget::PatchWorkingCopyFromWidgets()
+{
+	WorkingCopy.CharacterSettings = BuildDeveloperCharacterSettingsFromWidgets(WorkingCopy.CharacterSettings);
+	WorkingCopy.CameraManagerSettings = BuildDeveloperCameraManagerSettingsFromWidgets(WorkingCopy.CameraManagerSettings);
+
+	if (HasDeveloperCombatWidgetBindings())
+	{
+		WorkingCopy.bHasSavedCombatSettings = true;
+	}
+
+	if (HasDeveloperChargeShotWidgetBindings())
+	{
+		WorkingCopy.bHasSavedChargeShotSettings = true;
+	}
+
+	if (HasDeveloperTraversalWidgetBindings())
+	{
+		WorkingCopy.bHasSavedTraversalSettings = true;
+	}
+
+	if (Common_AutoRestartLevel)
+	{
+		WorkingCopy.bAutoRestartLevel = Common_AutoRestartLevel->GetCheckboxValue();
+	}
+}
+
+FDeveloperPlatformerCharacterSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCharacterSettingsFromWidgets(
+	const FDeveloperPlatformerCharacterSettings& BaseDeveloperSettings) const
+{
+	FDeveloperPlatformerCharacterSettings DeveloperSettings = BaseDeveloperSettings;
 
 	if (SpringArm_ArmLength)
 	{
@@ -267,52 +607,68 @@ FDeveloperPlatformerCharacterSettings UPlatformerDeveloperSettingsWidget::BuildD
 		DeveloperSettings.DeveloperCameraSettings.DeveloperCameraRotation = Camera_Rotation->GetVectorValue();
 	}
 
-	DeveloperSettings.DeveloperCharacterMovementSettings = BuildDeveloperMovementSettingsFromWidgets();
-	DeveloperSettings.DeveloperCombatSettings = BuildDeveloperCombatSettingsFromWidgets();
+	DeveloperSettings.DeveloperCharacterMovementSettings =
+		BuildDeveloperMovementSettingsFromWidgets(DeveloperSettings.DeveloperCharacterMovementSettings);
+	DeveloperSettings.DeveloperCombatSettings = BuildDeveloperCombatSettingsFromWidgets(DeveloperSettings.DeveloperCombatSettings);
+	DeveloperSettings.DeveloperChargeShotSettings = BuildDeveloperChargeShotSettingsFromWidgets(
+		DeveloperSettings.DeveloperChargeShotSettings,
+		DeveloperSettings.DeveloperCombatSettings);
+	DeveloperSettings.DeveloperLedgeSettings = BuildDeveloperLedgeSettingsFromWidgets(DeveloperSettings.DeveloperLedgeSettings);
+	DeveloperSettings.DeveloperSlideDashSettings = BuildDeveloperSlideDashSettingsFromWidgets(
+		DeveloperSettings.DeveloperSlideDashSettings);
+	DeveloperSettings.DeveloperWallSettings = BuildDeveloperWallSettingsFromWidgets(DeveloperSettings.DeveloperWallSettings);
 
 	return DeveloperSettings;
 }
 
-FDeveloperPlatformerCameraManagerSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCameraManagerSettingsFromWidgets() const
+FDeveloperPlatformerCameraManagerSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCameraManagerSettingsFromWidgets(
+	const FDeveloperPlatformerCameraManagerSettings& BaseDeveloperCameraManagerSettings) const
 {
-	FDeveloperPlatformerCameraManagerSettings DeveloperCameraManagerSettings;
+	FDeveloperPlatformerCameraManagerSettings DeveloperCameraManagerSettings = BaseDeveloperCameraManagerSettings;
 
 	if (CameraManager_IdleSpeedThreshold)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerIdleSpeedThreshold = CameraManager_IdleSpeedThreshold->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerIdleSpeedThreshold =
+			CameraManager_IdleSpeedThreshold->GetEditableParameterValue();
 	}
 
 	if (CameraManager_HOffset)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffset = CameraManager_HOffset->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffset =
+			CameraManager_HOffset->GetEditableParameterValue();
 	}
 
 	if (CameraManager_HOffsetInterpSpeedStart)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart = CameraManager_HOffsetInterpSpeedStart->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedStart =
+			CameraManager_HOffsetInterpSpeedStart->GetEditableParameterValue();
 	}
 
 	if (CameraManager_HOffsetInterpSpeedEnd)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd = CameraManager_HOffsetInterpSpeedEnd->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerHorizontalOffsetInterpSpeedEnd =
+			CameraManager_HOffsetInterpSpeedEnd->GetEditableParameterValue();
 	}
 
 	if (CameraManager_VOffset)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffset = CameraManager_VOffset->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffset =
+			CameraManager_VOffset->GetEditableParameterValue();
 	}
 
 	if (CameraManager_VOffsetInterpSpeed)
 	{
-		DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed = CameraManager_VOffsetInterpSpeed->GetEditableParameterValue();
+		DeveloperCameraManagerSettings.DeveloperCameraManagerVerticalOffsetInterpSpeed =
+			CameraManager_VOffsetInterpSpeed->GetEditableParameterValue();
 	}
 
 	return DeveloperCameraManagerSettings;
 }
 
-FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperMovementSettingsFromWidgets() const
+FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperMovementSettingsFromWidgets(
+	const FDeveloperPlatformerCharacterMovementSettings& BaseDeveloperCharacterMovementSettings) const
 {
-	FDeveloperPlatformerCharacterMovementSettings DeveloperCharacterMovementSettings;
+	FDeveloperPlatformerCharacterMovementSettings DeveloperCharacterMovementSettings = BaseDeveloperCharacterMovementSettings;
 
 	if (Movement_MaxWalkSpeed)
 	{
@@ -331,7 +687,8 @@ FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget
 
 	if (Movement_BrakingDecelerationWalking)
 	{
-		DeveloperCharacterMovementSettings.DeveloperMovementBrakingDecelerationWalking = Movement_BrakingDecelerationWalking->GetEditableParameterValue();
+		DeveloperCharacterMovementSettings.DeveloperMovementBrakingDecelerationWalking =
+			Movement_BrakingDecelerationWalking->GetEditableParameterValue();
 	}
 
 	if (Movement_JumpZVelocity)
@@ -341,7 +698,8 @@ FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget
 
 	if (Movement_JumpApexGravityMultiplier)
 	{
-		DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier = Movement_JumpApexGravityMultiplier->GetEditableParameterValue();
+		DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier =
+			Movement_JumpApexGravityMultiplier->GetEditableParameterValue();
 	}
 
 	if (Movement_GravityScale)
@@ -356,7 +714,8 @@ FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget
 
 	if (Movement_BrakingFrictionFactor)
 	{
-		DeveloperCharacterMovementSettings.DeveloperMovementBrakingFrictionFactor = Movement_BrakingFrictionFactor->GetEditableParameterValue();
+		DeveloperCharacterMovementSettings.DeveloperMovementBrakingFrictionFactor =
+			Movement_BrakingFrictionFactor->GetEditableParameterValue();
 	}
 
 	if (Movement_GroundFriction)
@@ -372,9 +731,10 @@ FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget
 	return DeveloperCharacterMovementSettings;
 }
 
-FDeveloperPlatformerCombatSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCombatSettingsFromWidgets() const
+FDeveloperPlatformerCombatSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperCombatSettingsFromWidgets(
+	const FDeveloperPlatformerCombatSettings& BaseDeveloperCombatSettings) const
 {
-	FDeveloperPlatformerCombatSettings DeveloperCombatSettings;
+	FDeveloperPlatformerCombatSettings DeveloperCombatSettings = BaseDeveloperCombatSettings;
 
 	if (Combat_MaxHealth)
 	{
@@ -424,11 +784,191 @@ FDeveloperPlatformerCombatSettings UPlatformerDeveloperSettingsWidget::BuildDeve
 	return DeveloperCombatSettings;
 }
 
-void UPlatformerDeveloperSettingsWidget::ApplyDeveloperSettingsToTargetCharacter(const FDeveloperPlatformerCharacterSettings& DeveloperSettings) const
+FPlatformerChargeShotTuning UPlatformerDeveloperSettingsWidget::BuildDeveloperChargeShotSettingsFromWidgets(
+	const FPlatformerChargeShotTuning& BaseDeveloperChargeShotSettings,
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings) const
+{
+	FPlatformerChargeShotTuning DeveloperChargeShotSettings = BaseDeveloperChargeShotSettings;
+
+	if (Combat_RangePartialAttackDamage)
+	{
+		DeveloperChargeShotSettings.PartialDamageMultiplier = ResolveDeveloperPartialDamageMultiplierFromDisplay(
+			Combat_RangePartialAttackDamage->GetEditableParameterValue(),
+			DeveloperCombatSettings,
+			BaseDeveloperChargeShotSettings);
+	}
+
+	if (Combat_RangePartialAttackSpeed)
+	{
+		DeveloperChargeShotSettings.PartialProjectileSpeedMultiplier = ResolveDeveloperPartialSpeedMultiplierFromDisplay(
+			Combat_RangePartialAttackSpeed->GetEditableParameterValue(),
+			DeveloperCombatSettings,
+			BaseDeveloperChargeShotSettings);
+	}
+
+	if (Combat_PartialChargeTime)
+	{
+		DeveloperChargeShotSettings.PartialChargeTime = Combat_PartialChargeTime->GetEditableParameterValue();
+	}
+
+	if (Combat_FullChargeTime)
+	{
+		DeveloperChargeShotSettings.FullChargeTime = Combat_FullChargeTime->GetEditableParameterValue();
+	}
+
+	return DeveloperChargeShotSettings;
+}
+
+FPlatformerLedgeTraversalSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperLedgeSettingsFromWidgets(
+	const FPlatformerLedgeTraversalSettings& BaseDeveloperLedgeSettings) const
+{
+	FPlatformerLedgeTraversalSettings DeveloperLedgeSettings = BaseDeveloperLedgeSettings;
+
+	if (Ledge_DetectionDistance)
+	{
+		DeveloperLedgeSettings.DetectionDistance = Ledge_DetectionDistance->GetEditableParameterValue();
+	}
+
+	if (Ledge_MaxReachHeight)
+	{
+		DeveloperLedgeSettings.MaxReachHeight = Ledge_MaxReachHeight->GetEditableParameterValue();
+	}
+
+	if (Ledge_MinHangHeight)
+	{
+		DeveloperLedgeSettings.MinHangHeight = Ledge_MinHangHeight->GetEditableParameterValue();
+	}
+
+	if (Ledge_ForwardProbeRadius)
+	{
+		DeveloperLedgeSettings.ForwardProbeRadius = Ledge_ForwardProbeRadius->GetEditableParameterValue();
+	}
+
+	if (Ledge_TopSurfaceForwardOffset)
+	{
+		DeveloperLedgeSettings.TopSurfaceProbeForwardOffset = Ledge_TopSurfaceForwardOffset->GetEditableParameterValue();
+	}
+
+	if (Ledge_HangForwardOffset)
+	{
+		DeveloperLedgeSettings.HangForwardOffset = Ledge_HangForwardOffset->GetEditableParameterValue();
+	}
+
+	if (Ledge_HangVerticalOffset)
+	{
+		DeveloperLedgeSettings.HangVerticalOffset = Ledge_HangVerticalOffset->GetEditableParameterValue();
+	}
+
+	if (Ledge_ClimbSpeed)
+	{
+		DeveloperLedgeSettings.ClimbSpeed = Ledge_ClimbSpeed->GetEditableParameterValue();
+	}
+
+	if (Ledge_ForgivenessWindow)
+	{
+		DeveloperLedgeSettings.ForgivenessWindow = Ledge_ForgivenessWindow->GetEditableParameterValue();
+	}
+
+	if (Ledge_RegrabCooldown)
+	{
+		DeveloperLedgeSettings.RegrabCooldown = Ledge_RegrabCooldown->GetEditableParameterValue();
+	}
+
+	return DeveloperLedgeSettings;
+}
+
+FPlatformerSlideDashSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperSlideDashSettingsFromWidgets(
+	const FPlatformerSlideDashSettings& BaseDeveloperSlideDashSettings) const
+{
+	FPlatformerSlideDashSettings DeveloperSlideDashSettings = BaseDeveloperSlideDashSettings;
+
+	if (Dash_DashSpeed)
+	{
+		DeveloperSlideDashSettings.DashSpeed = Dash_DashSpeed->GetEditableParameterValue();
+	}
+
+	if (Dash_DashDistance)
+	{
+		DeveloperSlideDashSettings.DashDistance = Dash_DashDistance->GetEditableParameterValue();
+	}
+
+	if (Dash_DashDuration)
+	{
+		DeveloperSlideDashSettings.DashDuration = Dash_DashDuration->GetEditableParameterValue();
+	}
+
+	if (Dash_DashRecovery)
+	{
+		DeveloperSlideDashSettings.DashRecovery = Dash_DashRecovery->GetEditableParameterValue();
+	}
+
+	if (Dash_DashHitboxScale)
+	{
+		DeveloperSlideDashSettings.DashHitboxScale = Dash_DashHitboxScale->GetEditableParameterValue();
+	}
+
+	return DeveloperSlideDashSettings;
+}
+
+FPlatformerWallTraversalSettings UPlatformerDeveloperSettingsWidget::BuildDeveloperWallSettingsFromWidgets(
+	const FPlatformerWallTraversalSettings& BaseDeveloperWallSettings) const
+{
+	FPlatformerWallTraversalSettings DeveloperWallSettings = BaseDeveloperWallSettings;
+
+	if (Wall_ProbeDistance)
+	{
+		DeveloperWallSettings.ProbeDistance = Wall_ProbeDistance->GetEditableParameterValue();
+	}
+
+	if (Wall_ProbeHeightOffset)
+	{
+		DeveloperWallSettings.ProbeHeightOffset = Wall_ProbeHeightOffset->GetEditableParameterValue();
+	}
+
+	if (Wall_SlideSpeed)
+	{
+		DeveloperWallSettings.SlideSpeed = Wall_SlideSpeed->GetEditableParameterValue();
+	}
+
+	if (Wall_WallJumpForce)
+	{
+		DeveloperWallSettings.WallJumpForce = Wall_WallJumpForce->GetEditableParameterValue();
+	}
+
+	if (Wall_WallJumpAngleDegrees)
+	{
+		DeveloperWallSettings.WallJumpAngleDegrees = Wall_WallJumpAngleDegrees->GetEditableParameterValue();
+	}
+
+	if (Wall_ClingTime)
+	{
+		DeveloperWallSettings.ClingTime = Wall_ClingTime->GetEditableParameterValue();
+	}
+
+	if (Wall_SameWallReattachCooldown)
+	{
+		DeveloperWallSettings.SameWallReattachCooldown = Wall_SameWallReattachCooldown->GetEditableParameterValue();
+	}
+
+	if (Wall_MinFallSpeedForSlide)
+	{
+		DeveloperWallSettings.MinFallSpeedForSlide = Wall_MinFallSpeedForSlide->GetEditableParameterValue();
+	}
+
+	return DeveloperWallSettings;
+}
+
+void UPlatformerDeveloperSettingsWidget::ApplyDeveloperSettingsSnapshotToTargets(
+	const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot) const
 {
 	if (APlatformerCharacterBase* DeveloperTargetCharacter = GetDeveloperTargetCharacter())
 	{
-		DeveloperTargetCharacter->ApplyDeveloperCharacterSettings(DeveloperSettings);
+		DeveloperTargetCharacter->ApplyDeveloperSettingsSnapshot(DeveloperSettingsSnapshot);
+	}
+
+	if (APlatformerCameraManager* DeveloperTargetCameraManager = GetDeveloperTargetCameraManager())
+	{
+		DeveloperTargetCameraManager->ApplyDeveloperCameraManagerSettings(DeveloperSettingsSnapshot.CameraManagerSettings);
 	}
 }
 
@@ -442,19 +982,24 @@ APlatformerCharacterBase* UPlatformerDeveloperSettingsWidget::GetDeveloperTarget
 	return nullptr;
 }
 
-void UPlatformerDeveloperSettingsWidget::ApplyDeveloperSettingsToTargetCameraManager(const FDeveloperPlatformerCameraManagerSettings& DeveloperCameraManagerSettings) const
-{
-	if (APlatformerCameraManager* DeveloperTargetCameraManager = GetDeveloperTargetCameraManager())
-	{
-		DeveloperTargetCameraManager->ApplyDeveloperCameraManagerSettings(DeveloperCameraManagerSettings);
-	}
-}
-
 APlatformerCameraManager* UPlatformerDeveloperSettingsWidget::GetDeveloperTargetCameraManager() const
 {
 	if (APlayerController* OwningPlayerController = GetOwningPlayer())
 	{
 		return Cast<APlatformerCameraManager>(OwningPlayerController->PlayerCameraManager);
+	}
+
+	return nullptr;
+}
+
+UPlatformerDeveloperSettingsSubsystem* UPlatformerDeveloperSettingsWidget::GetDeveloperSettingsSubsystem() const
+{
+	if (UWorld* WidgetWorld = GetWorld())
+	{
+		if (UGameInstance* GameInstance = WidgetWorld->GetGameInstance())
+		{
+			return GameInstance->GetSubsystem<UPlatformerDeveloperSettingsSubsystem>();
+		}
 	}
 
 	return nullptr;
@@ -486,22 +1031,276 @@ bool UPlatformerDeveloperSettingsWidget::HasDeveloperCombatWidgetBindings() cons
 		|| Combat_RangeAttackDelay;
 }
 
-void UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveClicked()
+bool UPlatformerDeveloperSettingsWidget::HasDeveloperChargeShotWidgetBindings() const
 {
-	const FDeveloperPlatformerCharacterSettings DeveloperSettings = BuildDeveloperCharacterSettingsFromWidgets();
-	const FDeveloperPlatformerCameraManagerSettings DeveloperCameraManagerSettings = BuildDeveloperCameraManagerSettingsFromWidgets();
+	return Combat_RangePartialAttackDamage
+		|| Combat_RangePartialAttackSpeed
+		|| Combat_PartialChargeTime
+		|| Combat_FullChargeTime;
+}
 
-	if (USaveDeveloperSettings* DeveloperSaveObject = USaveDeveloperSettings::LoadOrCreateDeveloperSettings(this))
+bool UPlatformerDeveloperSettingsWidget::HasDeveloperTraversalWidgetBindings() const
+{
+	return Ledge_DetectionDistance
+		|| Ledge_MaxReachHeight
+		|| Ledge_MinHangHeight
+		|| Ledge_ForwardProbeRadius
+		|| Ledge_TopSurfaceForwardOffset
+		|| Ledge_HangForwardOffset
+		|| Ledge_HangVerticalOffset
+		|| Ledge_ClimbSpeed
+		|| Ledge_ForgivenessWindow
+		|| Ledge_RegrabCooldown
+		|| Dash_DashSpeed
+		|| Dash_DashDistance
+		|| Dash_DashDuration
+		|| Dash_DashRecovery
+		|| Dash_DashHitboxScale
+		|| Wall_ProbeDistance
+		|| Wall_ProbeHeightOffset
+		|| Wall_SlideSpeed
+		|| Wall_WallJumpForce
+		|| Wall_WallJumpAngleDegrees
+		|| Wall_ClingTime
+		|| Wall_SameWallReattachCooldown
+		|| Wall_MinFallSpeedForSlide;
+}
+
+void UPlatformerDeveloperSettingsWidget::RefreshDeveloperSlotWidgets()
+{
+	CachedDeveloperSlots.Reset();
+
+	UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	if (DeveloperSettingsSubsystem)
 	{
-		DeveloperSaveObject->DeveloperCharacterSettings = DeveloperSettings;
-		DeveloperSaveObject->DeveloperCameraManagerSettings = DeveloperCameraManagerSettings;
-		DeveloperSaveObject->bHasSavedDeveloperCombatSettings = HasDeveloperCombatWidgetBindings();
-		USaveDeveloperSettings::WriteDeveloperSettingsToSlot(this, DeveloperSaveObject);
+		CachedDeveloperSlots = DeveloperSettingsSubsystem->GetAvailableSlots();
 	}
 
-	ApplyDeveloperSettingsToTargetCharacter(DeveloperSettings);
-	ApplyDeveloperSettingsToTargetCameraManager(DeveloperCameraManagerSettings);
-	CloseDeveloperSettingsWidget();
+	const FString CurrentSlotName = DeveloperSettingsSubsystem ? DeveloperSettingsSubsystem->GetCurrentSlotDisplayName() : FString();
+	const FString PreferredSlotName = !CurrentSlotName.IsEmpty()
+		? CurrentSlotName
+		: (CachedDeveloperSlots.Num() > 0 ? CachedDeveloperSlots[0].DisplayName : FString());
+	const FString RequestedSlotName = CurrentSlotName;
+
+	TGuardValue<bool> SynchronizationGuard(bIsSynchronizingSlotWidgets, true);
+
+	if (Combo_Slots)
+	{
+		Combo_Slots->ClearOptions();
+
+		for (const FPlatformerDeveloperSettingsSlotDescriptor& SlotDescriptor : CachedDeveloperSlots)
+		{
+			Combo_Slots->AddOption(SlotDescriptor.DisplayName);
+		}
+
+		if (!PreferredSlotName.IsEmpty())
+		{
+			Combo_Slots->SetSelectedOption(PreferredSlotName);
+		}
+		else
+		{
+			Combo_Slots->ClearSelection();
+		}
+	}
+
+	if (Txt_CurrSlotName)
+	{
+		Txt_CurrSlotName->SetText(FText::FromString(CurrentSlotName));
+	}
+
+	SyncRequestedSlotName(RequestedSlotName);
+	UpdateDeveloperSlotActionStates();
+}
+
+const FPlatformerDeveloperSettingsSlotDescriptor* UPlatformerDeveloperSettingsWidget::FindCachedSlotDescriptorByDisplayName(
+	const FString& DisplayName) const
+{
+	const FString SanitizedDisplayName = DisplayName.TrimStartAndEnd();
+	if (SanitizedDisplayName.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	return CachedDeveloperSlots.FindByPredicate([&SanitizedDisplayName](const FPlatformerDeveloperSettingsSlotDescriptor& Slot)
+	{
+		return Slot.DisplayName.Equals(SanitizedDisplayName, ESearchCase::IgnoreCase);
+	});
+}
+
+FString UPlatformerDeveloperSettingsWidget::GetRequestedDeveloperSlotName() const
+{
+	if (Editable_SlotName)
+	{
+		return Editable_SlotName->GetText().ToString().TrimStartAndEnd();
+	}
+
+	const FString SelectedSlotName = GetSelectedDeveloperSlotName();
+	if (!SelectedSlotName.IsEmpty())
+	{
+		return SelectedSlotName;
+	}
+
+	return GetDeveloperSettingsSubsystem() ? GetDeveloperSettingsSubsystem()->GetCurrentSlotDisplayName() : FString();
+}
+
+FString UPlatformerDeveloperSettingsWidget::GetSelectedDeveloperSlotName() const
+{
+	if (Combo_Slots)
+	{
+		return Combo_Slots->GetSelectedOption().TrimStartAndEnd();
+	}
+
+	return FString();
+}
+
+void UPlatformerDeveloperSettingsWidget::SyncRequestedSlotName(const FString& SlotName)
+{
+	if (Editable_SlotName)
+	{
+		Editable_SlotName->SetText(FText::FromString(SlotName));
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::UpdateDeveloperSlotActionStates()
+{
+	const UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	const bool bHasCurrentSlot = DeveloperSettingsSubsystem && DeveloperSettingsSubsystem->HasCurrentSlot();
+	const bool bHasSelectedSlot = FindCachedSlotDescriptorByDisplayName(GetSelectedDeveloperSlotName()) != nullptr;
+	const bool bHasRequestedSlotName = !GetRequestedDeveloperSlotName().IsEmpty();
+
+	if (Butt_Save)
+	{
+		Butt_Save->SetIsEnabled(bHasCurrentSlot);
+	}
+
+	if (Butt_SaveAs)
+	{
+		Butt_SaveAs->SetIsEnabled(bHasRequestedSlotName);
+	}
+
+	if (Butt_Load)
+	{
+		Butt_Load->SetIsEnabled(bHasSelectedSlot);
+	}
+
+	if (Butt_Delete)
+	{
+		Butt_Delete->SetIsEnabled(bHasSelectedSlot);
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveClicked()
+{
+	UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	if (!DeveloperSettingsSubsystem)
+	{
+		return;
+	}
+
+	PatchWorkingCopyFromWidgets();
+
+	if (DeveloperSettingsSubsystem->SaveCurrent(WorkingCopy))
+	{
+		ApplyDeveloperSettingsSnapshotToTargets(WorkingCopy);
+		RefreshDeveloperSlotWidgets();
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveAsClicked()
+{
+	UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	if (!DeveloperSettingsSubsystem)
+	{
+		return;
+	}
+
+	PatchWorkingCopyFromWidgets();
+
+	FPlatformerDeveloperSettingsSlotDescriptor SavedSlot;
+	if (DeveloperSettingsSubsystem->SaveAs(GetRequestedDeveloperSlotName(), WorkingCopy, SavedSlot))
+	{
+		ApplyDeveloperSettingsSnapshotToTargets(WorkingCopy);
+		RefreshDeveloperSlotWidgets();
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperLoadClicked()
+{
+	UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	if (!DeveloperSettingsSubsystem)
+	{
+		return;
+	}
+
+	const FPlatformerDeveloperSettingsSlotDescriptor* SelectedSlot =
+		FindCachedSlotDescriptorByDisplayName(GetSelectedDeveloperSlotName());
+	if (!SelectedSlot)
+	{
+		return;
+	}
+
+	FPlatformerDeveloperSettingsSnapshot LoadedSnapshot;
+	if (DeveloperSettingsSubsystem->LoadSlot(SelectedSlot->SlotId, LoadedSnapshot))
+	{
+		WorkingCopy = LoadedSnapshot;
+		ApplyDeveloperSettingsSnapshotToTargets(WorkingCopy);
+		LoadDeveloperSettingsSnapshotIntoWidgets(WorkingCopy);
+		RefreshDeveloperSlotWidgets();
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperDeleteClicked()
+{
+	UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem = GetDeveloperSettingsSubsystem();
+	if (!DeveloperSettingsSubsystem)
+	{
+		return;
+	}
+
+	const FPlatformerDeveloperSettingsSlotDescriptor* SelectedSlot =
+		FindCachedSlotDescriptorByDisplayName(GetSelectedDeveloperSlotName());
+	if (!SelectedSlot)
+	{
+		return;
+	}
+
+	const bool bDeletedCurrentSlot = DeveloperSettingsSubsystem->HasCurrentSlot()
+		&& DeveloperSettingsSubsystem->GetCurrentSlotDisplayName().Equals(SelectedSlot->DisplayName, ESearchCase::IgnoreCase);
+
+	if (DeveloperSettingsSubsystem->DeleteSlot(SelectedSlot->SlotId))
+	{
+		if (bDeletedCurrentSlot)
+		{
+			WorkingCopy = CaptureDeveloperSettingsSnapshotFromRuntime();
+			LoadDeveloperSettingsSnapshotIntoWidgets(WorkingCopy);
+		}
+
+		RefreshDeveloperSlotWidgets();
+	}
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperSlotSelectionChanged(
+	FString SelectedItem,
+	ESelectInfo::Type SelectionType)
+{
+	(void)SelectionType;
+
+	if (!bIsSynchronizingSlotWidgets)
+	{
+		SyncRequestedSlotName(SelectedItem);
+	}
+
+	UpdateDeveloperSlotActionStates();
+}
+
+void UPlatformerDeveloperSettingsWidget::HandleDeveloperSlotNameChanged(const FText& InText)
+{
+	(void)InText;
+
+	if (!bIsSynchronizingSlotWidgets)
+	{
+		UpdateDeveloperSlotActionStates();
+	}
 }
 
 void UPlatformerDeveloperSettingsWidget::HandleDeveloperCloseClicked()

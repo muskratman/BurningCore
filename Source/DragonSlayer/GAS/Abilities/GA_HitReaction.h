@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Abilities/GameplayAbility.h"
+#include "GAS/Abilities/GA_PlatformerHitReaction.h"
 #include "GA_HitReaction.generated.h"
 
 class UAnimMontage;
@@ -11,16 +11,16 @@ class UAnimMontage;
  * Played when taking significant damage or stagger. Interrupts current actions.
  */
 UCLASS()
-class DRAGONSLAYER_API UGA_HitReaction : public UGameplayAbility
+class DRAGONSLAYER_API UGA_HitReaction : public UGA_PlatformerHitReaction
 {
 	GENERATED_BODY()
 	
 public:
 	UGA_HitReaction();
 
-	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
-
 protected:
 	UPROPERTY(EditDefaultsOnly, Category="Animation")
 	TObjectPtr<UAnimMontage> HitReactMontage;
+
+	virtual UAnimMontage* GetHitReactionMontage(const FGameplayAbilityActorInfo* ActorInfo) const override;
 };

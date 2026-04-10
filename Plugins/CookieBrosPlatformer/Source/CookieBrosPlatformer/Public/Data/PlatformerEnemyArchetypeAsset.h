@@ -6,7 +6,9 @@
 #include "PlatformerEnemyArchetypeAsset.generated.h"
 
 class APlatformerEnemyBase;
+class AEnemyProjectile;
 class UGameplayAbility;
+class UGameplayEffect;
 class UStateTree;
 
 /**
@@ -26,7 +28,7 @@ public:
 	TSubclassOf<APlatformerEnemyBase> EnemyClass;
 
 	UPROPERTY(EditDefaultsOnly, Category="Stats")
-	float BaseHealth = 3.0f;
+	float BaseHealth = 100.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Stats")
 	float BaseDamage = 1.0f;
@@ -39,6 +41,27 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category="AI")
 	TObjectPtr<UStateTree> BehaviorTree;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	float CombatEngageRange = 1500.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	float CombatLoseTargetRange = 2000.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	float CombatAttackRange = 150.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat")
+	TSubclassOf<UGameplayEffect> DamageEffectClass;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat|Ranged")
+	TSubclassOf<AEnemyProjectile> ProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat|Ranged")
+	float ProjectileSpeed = 1500.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Combat|Ranged")
+	float ProjectileLifetime = 5.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category="Combat")
 	TArray<TSubclassOf<UGameplayAbility>> Abilities;

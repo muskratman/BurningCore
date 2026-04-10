@@ -1,8 +1,8 @@
 #include "AI/EnemyMelee.h"
 #include "GAS/Attributes/EnemyAttributeSet.h"
 
-AEnemyMelee::AEnemyMelee()
+AEnemyMelee::AEnemyMelee(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UEnemyAttributeSet>(APlatformerCombatCharacterBase::GetAttributeSetSubobjectName()))
 {
 	// Setup specific melee behaviors
-	AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
 }

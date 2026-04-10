@@ -1,4 +1,5 @@
 #include "Core/UI/DragonSlayerHUD.h"
+#include "UI/PlatformerDefeatWidget.h"
 #include "UI/PauseMenu/DeveloperSettingsWidget.h"
 #include "UI/PauseMenu/PauseWidget.h"
 #include "Blueprint/UserWidget.h"
@@ -54,10 +55,22 @@ ADragonSlayerHUD::ADragonSlayerHUD()
 	{
 		DeveloperSettingsWidgetClass = UDeveloperSettingsWidget::StaticClass();
 	}
+
+	static ConstructorHelpers::FClassFinder<UPlatformerDefeatWidget> DefeatWidgetClassFinder(
+		TEXT("/Game/Blueprints/Widgets/WBP_DefeatMenu"));
+	if (DefeatWidgetClassFinder.Succeeded())
+	{
+		DefeatWidgetClass = DefeatWidgetClassFinder.Class;
+	}
 }
 
 void ADragonSlayerHUD::TogglePauseMenu()
 {
+	if (DefeatWidgetInstance && DefeatWidgetInstance->IsInViewport())
+	{
+		return;
+	}
+
 	if (PauseWidgetInstance && PauseWidgetInstance->IsInViewport())
 	{
 		HidePauseMenu();
@@ -71,7 +84,7 @@ void ADragonSlayerHUD::TogglePauseMenu()
 void ADragonSlayerHUD::ShowPauseMenu()
 {
 	APlayerController* PC = GetOwningPlayerController();
-	if (!PC)
+	if (!PC || (DefeatWidgetInstance && DefeatWidgetInstance->IsInViewport()))
 	{
 		return;
 	}
@@ -110,6 +123,11 @@ void ADragonSlayerHUD::HidePauseMenu()
 
 void ADragonSlayerHUD::ToggleDeveloperSettingsWidget()
 {
+	if (DefeatWidgetInstance && DefeatWidgetInstance->IsInViewport())
+	{
+		return;
+	}
+
 	if (DeveloperSettingsWidgetInstance && DeveloperSettingsWidgetInstance->IsInViewport())
 	{
 		HideDeveloperSettingsWidget();
@@ -123,7 +141,7 @@ void ADragonSlayerHUD::ToggleDeveloperSettingsWidget()
 void ADragonSlayerHUD::ShowDeveloperSettingsWidget()
 {
 	APlayerController* PC = GetOwningPlayerController();
-	if (!PC)
+	if (!PC || (DefeatWidgetInstance && DefeatWidgetInstance->IsInViewport()))
 	{
 		return;
 	}
@@ -151,6 +169,57 @@ void ADragonSlayerHUD::HideDeveloperSettingsWidget()
 	if (DeveloperSettingsWidgetInstance && DeveloperSettingsWidgetInstance->IsInViewport())
 	{
 		DeveloperSettingsWidgetInstance->RemoveFromParent();
+
+		if (APlayerController* PC = GetOwningPlayerController())
+		{
+			RestoreGameInputMode(PC);
+			PC->SetPause(false);
+		}
+	}
+}
+
+void ADragonSlayerHUD::ShowDefeatWidget()
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC)
+	{
+		return;
+	}
+
+	if (PauseWidgetInstance && PauseWidgetInstance->IsInViewport())
+	{
+		PauseWidgetInstance->RemoveFromParent();
+	}
+
+	if (DeveloperSettingsWidgetInstance && DeveloperSettingsWidgetInstance->IsInViewport())
+	{
+		DeveloperSettingsWidgetInstance->RemoveFromParent();
+	}
+
+	if (!DefeatWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DefeatWidgetClass is not set on %s"), *GetName());
+		return;
+	}
+
+	if (!DefeatWidgetInstance && DefeatWidgetClass)
+	{
+		DefeatWidgetInstance = CreateWidget<UPlatformerDefeatWidget>(PC, DefeatWidgetClass);
+	}
+
+	if (DefeatWidgetInstance && !DefeatWidgetInstance->IsInViewport())
+	{
+		DefeatWidgetInstance->AddToViewport(20);
+		ApplyMenuInputMode(PC, DefeatWidgetInstance);
+		PC->SetPause(true);
+	}
+}
+
+void ADragonSlayerHUD::HideDefeatWidget()
+{
+	if (DefeatWidgetInstance && DefeatWidgetInstance->IsInViewport())
+	{
+		DefeatWidgetInstance->RemoveFromParent();
 
 		if (APlayerController* PC = GetOwningPlayerController())
 		{

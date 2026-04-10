@@ -1,410 +1,184 @@
-# BurningCORE — Technical Architecture
+# DragonSlayer — Technical Architecture
 
 > **Тип:** 3D side-scrolling action platformer  
-> **Движок:** Unreal Engine 5.6 (`.uproject`), правила орієнтовані на UE 5.7  
-> **Мова:** C++ (PCH: Explicit), Blueprints тільки для layout/визуалів  
-> **Платформа:** PC (Windows)  
-> **Управління:** Клавіатура + миша (WASD, Space, Shift, ЛКМ/ПКМ)  
-> **Перспектива:** Вид від третьої особи збоку (90° до напрямку руху)  
-> **Рух:** переважно зліва направо  
+> **Движок:** Unreal Engine 5.6  
+> **Мова:** C++ (PCH: Explicit) + Blueprint only for layout/presentation  
+> **Архітектурна модель:** reusable platformer plugin + project-specific runtime module  
+> **Поточний production focus:** Dragon-first gameplay loop  
 
 ---
 
-## 1. Модуль & Залежності
+## 1. Modules & Ownership
 
-Проект має **єдиний C++ модуль** — `BurningCORE`.
+Проект більше не є legacy single-module layout. Поточна структура така:
 
-### Build.cs — Публічні залежності
-
-| Категорія | Модулі |
+| Модуль / Плагін | Призначення |
 |---|---|
-| **Core** | `Core`, `CoreUObject`, `Engine`, `InputCore` |
-| **Input** | `EnhancedInput` |
-| **AI** | `AIModule`, `StateTreeModule`, `GameplayStateTreeModule` |
-| **GAS** | `GameplayAbilities`, `GameplayTags`, `GameplayTasks` |
-| **UI** | `UMG`, `Slate`, `SlateCore` |
-| **VFX** | `Niagara` |
+| `Source/DragonSlayer` | Основний runtime module проекту |
+| `Plugins/CookieBrosPlatformer/Source/CookieBrosPlatformer` | Reusable platformer foundation |
+| `Plugins/CookieBrosPlatformer/Source/CookieBrosLevelEditor` | Editor/import tooling для рівнів і tilemap pipeline |
 
-### .uproject — Плагіни
+### `DragonSlayer.uproject`
 
-| Плагін | Призначення |
-|---|---|
-| `StateTree` | Дерева станів для AI |
-| `GameplayStateTree` | Інтеграція StateTree з Gameplay |
-| `GameplayAbilities` | Gameplay Ability System (GAS) |
-| `ModelingToolsEditorMode` | Інструменти моделювання (Editor-only) |
+- `EngineAssociation`: `5.6`
+- Runtime module: `DragonSlayer`
+- Enabled plugins: `StateTree`, `GameplayStateTree`, `GameplayAbilities`, `CookieBrosPlatformer`, `ModelingToolsEditorMode`
+
+### `DragonSlayer.Build.cs`
+
+Проектний модуль залежить від:
+
+- `CookieBrosPlatformer`
+- `EnhancedInput`
+- `AIModule`
+- `StateTreeModule`
+- `GameplayStateTreeModule`
+- `GameplayAbilities`, `GameplayTags`, `GameplayTasks`
+- `UMG`, `Slate`, `SlateCore`
+- `Niagara`
+- `DeveloperSettings`
 
 ---
 
-## 2. Production Structure
+## 2. Placement Rule
 
-Проект перейшов на production-first структуру.  
-Активний gameplay path проходить через `Core + Character + GAS + AI + Systems + Platformer + UI`, а platformer shell-класи тепер зібрані в `Platformer/Base` та `Platformer/Camera`.
+Ключове правило проекту:
 
-```
-Source/BurningCORE/
-│
-├── Core/                             ← Фреймворк рівня гри
-│   ├── BurningCOREGameMode           ← checkpoint-система, boss encounters, respawn
-│   ├── BurningCOREGameInstance        ← save/load, глобальний стан між рівнями
-│   ├── BurningCOREPlayerController    ← shared controller base
-│   ├── BurningCOREGameState           ← стан гри
-│   ├── BurningCOREPlayerState         ← стан гравця
-│   └── UI/MainMenu/                   ← головне меню
-│
-├── Character/                         ← Головний герой (Dragon)
-│   ├── DragonCharacter                ← ADragonCharacter (GAS, Damageable, форми)
-│   ├── DragonFormComponent            ← перемикання форм (FormRegistry, GameplayTags)
-│   ├── DragonOverdriveComponent       ← ресурс Overdrive (заповнення, активація, дренаж)
-│   └── SideViewMovementComponent      ← компонент руху для side-view
-│
-├── GAS/                               ← Gameplay Ability System
-│   ├── DragonAbilitySet               ← DataAsset зі списком Abilities & Effects
-│   ├── Abilities/                     ← Конкретні GameplayAbility
-│   │   ├── GA_Dash, GA_Jump
-│   │   ├── GA_DragonBaseShot, GA_DragonChargeShot
-│   │   ├── GA_FormSwitch, GA_OverdriveActivate
-│   │   └── GA_HitReaction
-│   └── Attributes/
-│       ├── DragonAttributeSet         ← Health, OverdriveEnergy, BaseDamage, ChargeMultiplier
-│       └── EnemyAttributeSet          ← аналог для ворогів
-│
-├── AI/                                ← Система ворогів
-│   ├── EnemyBase                      ← abstract (GAS + StateTree + AIPerception + Damageable)
-│   ├── EnemyMelee, EnemyRanged, EnemyFlying  ← спеціалізовані типи
-│   └── BossBase                       ← базовий клас босів
-│
-├── Combat/                            ← Снаряди
-│   ├── DragonProjectile               ← снаряд гравця
-│   └── EnemyProjectile                ← снаряд ворога
-│
-├── Data/                              ← Data-Driven Assets
-│   ├── DragonFormDataAsset            ← конфігурація форми (проджектайли, статуси, візуали, Niagara)
-│   └── EnemyArchetypeAsset            ← конфігурація типу ворога (статси, AI StateTree, abilities)
-│
-├── Interfaces/                        ← UINTERFACE
-│   ├── IDamageable                    ← ApplyDamage(GAS Spec), IsAlive()
-│   └── IInteractable                  ← для інтерактивних об'єктів
-│
-├── Systems/                           ← Ігрові системи
-│   ├── BurningCORESaveGame            ← збереження (прогрес, чекпоінти, форми, апгрейди, секрети)
-│   └── CheckpointActor                ← маркер чекпоінту на рівні
-│
-├── Platformer/                        ← Production platformer layer
-│   ├── Character/
-│   │   ├── PlayableDragonCharacter    ← production pawn поверх ADragonCharacter
-│   │   └── PlatformerInteractable     ← platformer interaction contract
-│   └── Environment/
-│       ├── PlatformerJumpPad          ← jump pad actor
-│       ├── PlatformerMovingPlatform   ← moving platform actor
-│       ├── PlatformerPickup           ← pickup actor
-│       └── PlatformerSoftPlatform     ← one-way / drop-through platform
-│
-├── UI/                                ← Runtime gameplay UI
-│   ├── PlatformerUI                   ← platformer HUD widget
-│   └── PauseMenu/                     ← pause/settings widgets
-│
-├── Platformer/Base/                   ← Framework shell для platformer mode
-│   ├── PlatformerGameMode             ← GameMode для рівнів
-│   └── PlatformerPlayerController     ← PlayerController для platformer flow
-└── Platformer/Camera/                 ← Camera shell
-    └── PlatformerCameraManager        ← кастомний менеджер камери
+- **`Plugins/CookieBrosPlatformer`** зберігає базові механіки платформера, які мають сенс для повторного використання в інших проектах.
+- **`Source/DragonSlayer`** зберігає все, що є проектно-специфічним для DragonSlayer.
+
+### Що належить плагіну
+
+- reusable `GameMode`, `PlayerController`, `GameInstance`
+- reusable character/combat/enemy shells
+- traversal і environment actors
+- reusable camera manager
+- save/load shell і developer settings infrastructure
+- reusable UI base widgets
+- interfaces, shared GAS helpers, generic projectiles
+
+### Що належить проекту
+
+- Dragon hero, форми, Overdrive
+- Dragon-specific abilities, attributes, effects
+- concrete enemies/bosses для цього проекту
+- DragonSlayer save payload і progression model
+- HUD, pause menu, main menu
+- game-specific flow glue поверх reusable shell-класів
+
+Якщо нова логіка не знає про Dragon, Overdrive, форми, конкретну прогресію або UI DragonSlayer, вона, ймовірно, має жити в плагіні.
+
+---
+
+## 3. Runtime Structure
+
+```text
+Plugins/CookieBrosPlatformer/Source/CookieBrosPlatformer/
+├── Core/                 reusable flow, save shell, developer settings
+├── Character/            APlatformerCharacterBase, side-view movement shell
+├── Combat/               reusable combat character base
+├── AI/                   APlatformerEnemyBase, APlatformerBossBase, enemy shells
+├── GAS/                  reusable abilities, attributes, ability sets
+├── Interfaces/           damage/save/checkpoint/pickup contracts
+├── Platformer/
+│   ├── Camera/           APlatformerCameraManager
+│   ├── Environment/      blocks, platforms, hazards, teleporter, ladder, etc.
+│   ├── Character/        platformer interaction contracts
+│   └── Systems/          checkpoint actor shell
+├── Traversal/            traversal components and movement
+├── UI/                   reusable dev/settings/health widgets
+└── Projectiles/          base projectile shells
+
+Source/DragonSlayer/
+├── Core/                 UDragonSlayerGameInstance, developer settings, main menu, HUD
+├── Character/            ADragonCharacter, DragonFormComponent, DragonOverdriveComponent
+├── GAS/                  Dragon abilities, attributes, effects, ability set
+├── AI/                   AEnemyMelee, AEnemyRanged, AEnemyFlying, ABossBase
+├── Data/                 UDragonFormDataAsset, UEnemyArchetypeAsset
+├── Systems/              UDragonSlayerSaveGame, ACheckpointActor
+├── Projectiles/          Dragon projectile types
+├── Platformer/
+│   ├── Base/             APlatformerGameMode, APlatformerPlayerController
+│   └── Character/        APlayableDragonCharacter
+└── UI/                   runtime HUD + pause/developer widgets
 ```
 
 ---
 
-## 3. Gameplay Ability System (GAS)
+## 4. Inheritance Model
 
-### 3.1 Інтеграція
+Проект розширює плагін, а не копіює його.
 
-- `ADragonCharacter` та `AEnemyBase` реалізують `IAbilitySystemInterface`.
-- Обидва класи мають `UAbilitySystemComponent` + відповідний `UAttributeSet`.
-- Damage передається через `FGameplayEffectSpecHandle` (інтерфейс `IDamageable`).
-
-### 3.2 Атрибути гравця (`UDragonAttributeSet`)
-
-| Категорія | Атрибут |
+| Reusable Base | Project Extension |
 |---|---|
-| **Vitals** | `Health`, `MaxHealth` |
-| **Overdrive** | `OverdriveEnergy`, `MaxOverdriveEnergy` |
-| **Combat** | `BaseDamage`, `ChargeMultiplier` |
-| **Meta** | `IncomingDamage` (пре-процесинг) |
+| `UPlatformerGameInstance` | `UDragonSlayerGameInstance` |
+| `APlatformerGameModeBase` | `APlatformerGameMode` |
+| `APlatformerPlayerControllerBase` | `APlatformerPlayerController` |
+| `APlatformerCharacterBase` | `ADragonCharacter` |
+| `ADragonCharacter` | `APlayableDragonCharacter` |
+| `APlatformerEnemyMelee` | `AEnemyMelee` |
+| `APlatformerEnemyRanged` | `AEnemyRanged` |
+| `APlatformerEnemyFlying` | `AEnemyFlying` |
+| `APlatformerBossBase` | `ABossBase` |
+| `UPlatformerEnemyArchetypeAsset` | `UEnemyArchetypeAsset` |
+| `UPlatformerSaveGame` | `UDragonSlayerSaveGame` |
+| `UPlatformerDeveloperSettingsWidget` | `UDeveloperSettingsWidget` |
 
-Є override'и `PreAttributeChange` та `PostGameplayEffectExecute` для clamping та reaction logic.
-
-### 3.3 Здібності (Abilities)
-
-| Ability | Опис |
-|---|---|
-| `GA_Dash` | Ривок / уникання |
-| `GA_Jump` | Стрибок (GAS-based) |
-| `GA_DragonBaseShot` | Базовий постріл |
-| `GA_DragonChargeShot` | Заряджений постріл |
-| `GA_FormSwitch` | Перемикання форми |
-| `GA_OverdriveActivate` | Активація Overdrive-режиму |
-| `GA_HitReaction` | Реакція на отримання удару |
-
-### 3.4 Data-Driven Abilities
-
-`UDragonAbilitySet` (DataAsset) — містить масиви `FDragonAbilitySet_Ability` та `FDragonAbilitySet_Effect`. Призначається на `ADragonCharacter` через `DefaultAbilitySet` і завантажується в `BeginPlay`.
+Це і є preferred path для нових систем: знайти правильний reusable shell і розширити його.
 
 ---
 
-## 4. Система форм (Dragon Form System)
+## 5. System Responsibilities
 
-Персонаж має кілька **бойових форм**, кожна з яких визначається `UDragonFormDataAsset`:
+### Character & Combat
 
-| Поле | Тип | Опис |
-|---|---|---|
-| `FormTag` | `FGameplayTag` | Ідентифікатор форми |
-| `ProjectileClass` | `TSubclassOf<ADragonProjectile>` | Базовий снаряд |
-| `ChargeProjectileClass` | `TSubclassOf<ADragonProjectile>` | Заряджений снаряд |
-| `OnHitStatusEffect` | `TSubclassOf<UGameplayEffect>` | Ефект при попаданні |
-| `StatusStacksPerHit` / `StatusThreshold` | `int32` | Система стеків статус-ефектів |
-| `OverdriveProjectileClass` | `TSubclassOf<ADragonProjectile>` | Снаряд в Overdrive |
-| `OverdriveDamageMultiplier` | `float` | Множник урону Overdrive |
-| `ChargeTime` | `float` | Час зарядки |
-| `CharacterOverlayMaterial` | `UMaterialInterface*` | Візуальний оверлей |
-| `FormColor` | `FLinearColor` | Колір форми |
-| `FormAuraVFX` | `UNiagaraSystem*` | VFX аура (Niagara) |
+- `APlatformerCharacterBase` дає camera rig, side-view movement shell, combat/bootstrap і developer settings hooks.
+- `ADragonCharacter` додає hero-specific компоненти: `UDragonFormComponent` і `UDragonOverdriveComponent`.
+- `APlayableDragonCharacter` підключає current production input, traversal component і gameplay glue для playable build.
 
-**`UDragonFormComponent`** — управляє активною формою через `FormRegistry` (`TMap<FGameplayTag, UDragonFormDataAsset*>`).
+### GAS
 
----
+- reusable платформа вже містить base abilities / attributes / ability-set infrastructure;
+- `Source/DragonSlayer/GAS` додає Dragon-specific shot, charge shot, form switch, hit reaction, overdrive activation;
+- damage, combat states і tuning проходять через GAS/DataAssets, а не через hardcoded UI logic.
 
-## 5. Overdrive System
+### AI
 
-`UDragonOverdriveComponent` — ресурсний компонент:
+- база ворогів і reusable enemy shells живуть у плагіні;
+- concrete project enemies та boss-класи живуть у `Source/DragonSlayer/AI`;
+- основний стек AI: `StateTree` + `GameplayStateTree` + `AIModule`.
 
-- **Заповнення**: `AddOverdriveEnergy()` — додає енергію (від вбивства ворогів, `OverdriveEnergyDrop` з `EnemyArchetypeAsset`)
-- **Активація**: `TryActivateOverdrive()` — перевіряє поріг (`ActivationThreshold`)
-- **Дренаж**: Tick-based (`DrainRate` одиниць/сек)
-- **Делегат**: `OnOverdriveStateChanged` — для UI та VFX реакцій
+### Data
 
----
+- `UDragonFormDataAsset` описує бойові форми Dragon;
+- `UEnemyArchetypeAsset` розширює reusable enemy archetype shell для конкретного проектного тюнінгу.
 
-## 6. AI система
+### Save & Progression
 
-### Стек технологій
-- **StateTree** (замість BehaviorTree) — основна поведінкова модель
-- **GameplayStateTree** — інтеграція StateTree з Gameplay Framework
-- **AIPerception** — для detection/awareness
-- **EQS** (Environment Query System) — для пошуку позицій
+- плагін надає save shell і save service contracts;
+- `UDragonSlayerSaveGame` зберігає progression payload: регіони, стани рівнів, форми, апгрейди, секрети, валюту, смерті;
+- `UDragonSlayerGameInstance` прив'язує конкретний тип сейва і startup flow проекту.
 
-### Ієрархія ворогів
+### UI
 
-```
-AEnemyBase (abstract)
-├── AEnemyMelee    — ближній бій
-├── AEnemyRanged   — дальній бій (EnemyProjectile)
-├── AEnemyFlying   — літаючий ворог
-└── ABossBase      — базовий клас босів
-```
+- reusable developer/health/settings widgets знаходяться у плагіні;
+- game HUD, pause menu, main menu і DragonSlayer-specific presentation живуть у `Source/DragonSlayer/UI` та `Source/DragonSlayer/Core/UI`.
 
-Кожен ворог конфігурується через **`UEnemyArchetypeAsset`**:
-- `BaseHealth`, `BaseDamage`, `MoveSpeed` — базові характеристики
-- `BehaviorTree` (`UStateTree*`) — поведінка
-- `Abilities` — масив `TSubclassOf<UGameplayAbility>`
-- `CurrencyDrop`, `OverdriveEnergyDrop` — нагороди
-- `Immunities` — масив `FGameplayTag` імунітетів
+### Camera
+
+- `APlatformerCameraManager` живе у плагіні як reusable side-view camera shell;
+- поточна камера використовує smooth follow і movement-based look-ahead;
+- фіксація через `Camera XMin Bounds` / `Camera XMax Bounds` більше не є частиною актуальної поведінки.
 
 ---
 
-## 7. Input System
+## 6. Current Architectural Rules
 
-Використовується **Enhanced Input** з паттерном `Do*()`:
+- Generic platformer feature first goes to `CookieBrosPlatformer`.
+- DragonSlayer-specific logic stays in `Source/DragonSlayer`.
+- Не дублювати plugin base class у проекті, якщо достатньо inheritance.
+- Не тягнути Dragon-specific knowledge в reusable plugin.
+- Для AI використовується `StateTree`, не `BehaviorTree`.
+- Основна логіка в C++, Blueprint використовуються для presentation/layout/asset wiring.
 
-```cpp
-// Обробник InputAction
-void Move(const FInputActionValue& Value) { DoMove(Value.Get<FVector2D>().X, ...); }
-
-// Публічний метод — може викликатись з UI, AI, або напряму
-UFUNCTION(BlueprintCallable)
-virtual void DoMove(float Right, float Forward);
-```
-
-**Input Actions** (визначені як `UInputAction*` UPROPERTY):
-- `MoveAction` — рух (WASD)
-- `JumpAction` — стрибок (Space)
-- `LookAction` / `MouseLookAction` — погляд
-
-Додаткові дії для GAS abilities (Dash, Attack, FormSwitch) біндяться у production pawn-класах поверх `ADragonCharacter`.
-
----
-
-## 8. Camera System
-
-- **Character**: `USpringArmComponent` + `UCameraComponent` на `ADragonCharacter`
-- **Platformer**: `PlatformerCameraManager` — кастомний менеджер камери для side-view (90° відносно напрямку руху)
-- Камера фіксована збоку (2.5D perspective)
-
----
-
-## 9. Level Flow & Persistence
-
-### GameMode (`ABurningCOREGameMode`)
-- `RespawnPlayerAtCheckpoint()` — респаун на останньому чекпоінті
-- `ActivateBossEncounter(Boss)` — запуск boss fight
-- `OnLevelCompleted()` — логіка завершення рівня
-- `RegisterCheckpoint(Checkpoint)` — реєстрація чекпоінтів
-
-### Save System
-- `UBurningCOREGameInstance` — керує `SaveProgress()` / `LoadProgress()`
-- `UBurningCORESaveGame` → `FPlayerProgressionData`:
-  - `UnlockedRegions` / `LevelStates` (Locked → Unlocked → Completed → Perfected)
-  - `UnlockedForms`, `PurchasedUpgrades`, `CollectedSecrets`
-  - `UpgradeCurrency`, `TotalDeaths`
-  - `LastCheckpoint` (tag + level name)
-
-### Level Structure
-- Головне меню (MainMenu level + `MainMenuGameMode`)
-- До 20 ігрових рівнів (окремі `.umap`)
-- Level selection через `MainMenuWidget`
-
----
-
-## 10. UI система
-
-| Шар | Технологія | Опис |
-|---|---|---|
-| **C++ Base** | `UUserWidget` | Базові класи віджетів у C++ |
-| **BP Layout** | UMG (Blueprint Widgets) | Візуали та анімації в Blueprint |
-| **Slate** | `Slate` / `SlateCore` | Для кастомних елементів |
-
-### Наявні UI компоненти
-- `UI/` — runtime HUD і pause/settings widgets
-- `Core/UI/MainMenu/` — головне меню з вибором рівнів
-
----
-
-## 11. Interfaces (UINTERFACE)
-
-| Інтерфейс | Методи | Де реалізований |
-|---|---|---|
-| `IDamageable` | `ApplyDamage(GAS Spec, HitResult)`, `IsAlive()` | `DragonCharacter`, `EnemyBase` |
-| `IInteractable` | (взаємодія) | Gameplay objects |
-| `IPlatformerInteractable` | `Interaction(AActor*)` | Platformer environment / interactive actors |
-
----
-
-## 12. Code Style & Conventions
-
-### Правила
-
-| Правило | Приклад |
-|---|---|
-| Forward declarations в `.h` | `class USpringArmComponent;` |
-| `UPROPERTY` з `Category`, `meta` | `meta=(ClampMin=0, ClampMax=100)` |
-| `UCLASS(abstract)` для базових класів | `ADragonCharacter`, `AEnemyBase` |
-| `FORCEINLINE` для getter-ів | `FORCEINLINE UCameraComponent* GetFollowCamera() const` |
-| Interface секції маркеровані | `// ~begin CombatAttacker interface` |
-| PCH: Explicit | `PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs` |
-| `TObjectPtr<>` для UPROPERTY | `TObjectPtr<UAbilitySystemComponent>` |
-| Do*-паттерн для Input | `Move() → DoMove()`, `Jump() → DoJumpStart()` |
-
-### Naming Conventions
-
-| Тип | Формат | Приклад |
-|---|---|---|
-| Actor | `A` prefix | `ADragonCharacter` |
-| Component | `U` prefix | `UDragonFormComponent` |
-| Interface | `I` prefix | `IDamageable` |
-| Struct | `F` prefix | `FCheckpointSaveData` |
-| Enum | `E` prefix | `ELevelCompletionStatus` |
-| GameplayAbility | `GA_` prefix | `GA_Dash`, `GA_Jump` |
-| Log Category | `Log{Name}` | `LogTemplateCharacter` |
-
-### Файлова структура
-
-- Ім'я файлу = ім'я класу без UE-prefix (`DragonCharacter.h`)
-- Platformer-специфічні класи залишають історичні імена, але живуть у `Platformer/*`
-- Include order: matching .h → CoreMinimal → Engine → Project
-
----
-
-## 13. Архітектурні рішення та обґрунтування
-
-| Рішення | Причина |
-|---|---|
-| Production-first layering | Один активний gameplay path без дублювання pawn/controller stacks |
-| UINTERFACE замість hard dependencies | Розв'язання зв'язків між підсистемами |
-| GAS для abilities та damage | Стандартний UE підхід для combat-ігор з атрибутами |
-| StateTree замість BehaviorTree | Вибір для UE 5.7+, більш сучасний підхід |
-| DataAsset-driven конфігурація | Forms, Archetypes, AbilitySets — все через DataAsset |
-| C++ base + BP derived | Логіка в C++, візуали/ассети в BP |
-| EnhancedInput + Do*() | UI та AI можуть викликати ту ж логіку без InputAction |
-| Niagara для VFX | Form auras, ефекти (замість Cascade) |
-| GameplayTags для ідентифікації | Форми, чекпоінти, регіони, апгрейди — все через Tags |
-
----
-
-## 14. Діаграма залежностей
-
-```mermaid
-graph TD
-    subgraph Core ["Core Layer"]
-        GM[ABurningCOREGameMode]
-        PC[ABurningCOREPlayerController]
-        GI[UBurningCOREGameInstance]
-    end
-
-    subgraph Character ["Dragon Character"]
-        DC[ADragonCharacter]
-        FC[UDragonFormComponent]
-        OC[UDragonOverdriveComponent]
-        SM[USideViewMovementComponent]
-    end
-
-    subgraph GAS ["Gameplay Ability System"]
-        ASC[UAbilitySystemComponent]
-        DAS[UDragonAttributeSet]
-        EAS[UEnemyAttributeSet]
-        GA[GA_Dash / GA_Jump / GA_Shot...]
-    end
-
-    subgraph AI_Layer ["AI Layer"]
-        EB[AEnemyBase]
-        EM[AEnemyMelee]
-        ER[AEnemyRanged]
-        EF[AEnemyFlying]
-        BB[ABossBase]
-        ST[StateTree + AIPerception]
-    end
-
-    subgraph Data ["Data Assets"]
-        FD[UDragonFormDataAsset]
-        EA[UEnemyArchetypeAsset]
-        ABS[UDragonAbilitySet]
-    end
-
-    subgraph Interfaces ["Interfaces"]
-        ID[IDamageable]
-        II[IInteractable]
-        IASI[IAbilitySystemInterface]
-    end
-
-    DC --> IASI
-    DC --> ID
-    DC --> FC
-    DC --> OC
-    DC --> SM
-    DC --> ASC
-    DC --> DAS
-    DC --> ABS
-
-    EB --> IASI
-    EB --> ID
-    EB --> ASC
-    EB --> EAS
-    EB --> ST
-    EB --> EA
-
-    EM --> EB
-    ER --> EB
-    EF --> EB
-    BB --> EB
-
-    FC --> FD
-    GA --> ASC
-    GM --> GI
-```
+Цей документ є поточним source of truth для технічної структури проекту. Деталізацію по ролях дивись у `Docs/Roles/` та `.rules/context/roles.md`.

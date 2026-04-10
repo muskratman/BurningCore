@@ -1,28 +1,33 @@
-# Evaluation: BurningCORE
+# Evaluation: DragonSlayer
 
 ## Pre-Response Checklist
 
 Перед кожною відповіддю агент повинен перевірити своє рішення за цим списком:
 
 ### 1. Architectural Fit
-- [ ] Рішення вкладається в production-first структуру `Core + Character + GAS + AI + Systems + Platformer + UI`?
+- [ ] Рішення коректно розкладене між `Plugins/CookieBrosPlatformer` і `Source/DragonSlayer`?
 - [ ] Перевірено збіг ролі (Architect/Gameplay/UI) з поточними файлами?
-- [ ] Взаємодія між шарами йде через interfaces або існуючі framework-механізми без legacy-дублів?
+- [ ] Generic platformer mechanic не залишився випадково в project module?
+- [ ] DragonSlayer-specific knowledge не протекло в reusable plugin?
+- [ ] Взаємодія між шарами йде через interfaces, GAS, DataAssets або існуючі framework-механізми без дублювання?
 
 ### 2. Code Quality & Rules
-- [ ] Використано EnhancedInput `Do*()` патерн для нових Input Actions?
+- [ ] Input callbacks залишаються тонким glue-шаром між EnhancedInput і gameplay логікою?
 - [ ] Всі числові UPROPERTY мають `meta = (ClampMin, ClampMax)`?
-- [ ] Для подій використовуються `BlueprintImplementableEvent` замість hardcoded C++ логіки?
+- [ ] Для reusable/project boundaries обрано правильний базовий клас або derivation path?
+- [ ] Для подій використовуються Blueprint hooks, DataAssets або interfaces замість hardcoded presentation-логіки?
 - [ ] Чи додано `FORCEINLINE` до getter методів?
 
 ### 3. Permissions Security
 - [ ] Рішення намагається змінити `Build.cs` чи `.uproject`? → Потрібне підтвердження (⚠️)
+- [ ] Рішення намагається змінити `Config/`? → Потрібне підтвердження (⚠️)
 - [ ] Рішення видаляє існуючі `.uasset` файли? → Потрібне підтвердження (❌/⚠️)
-- [ ] Змінюються існуючі C++ Base класи (`BurningCORE*.h/.cpp`)? → Тільки роль Architect (⚠️)
+- [ ] Змінюються reusable C++ base класи в `Plugins/CookieBrosPlatformer` або framework glue в `Source/DragonSlayer/Core`? → Тільки роль Architect (⚠️)
 
 ### 4. Overcomplexity Trigger
 - [ ] Чи додає це рішення нову абстракцію, яка використовується тільки один раз?
 - [ ] Чи можна вирішити це простіше в межах існуючого класу?
+- [ ] Чи не створює це дубль між plugin foundation і project layer?
 - [ ] Якщо ефективність < 70%, чи було зроблено крок назад до плану?
 
 ## Self-Correction Protocol

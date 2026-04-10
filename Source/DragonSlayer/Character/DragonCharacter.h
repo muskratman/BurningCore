@@ -26,8 +26,13 @@ class DRAGONSLAYER_API ADragonCharacter : public APlatformerCharacterBase
 public:
 	ADragonCharacter(const FObjectInitializer& ObjectInitializer);
 	UDragonAttributeSet* GetDragonAttributeSet() const;
+	float GetProjectileMaxDistance() const { return ProjectileMaxDistance; }
 
 public:
 	FORCEINLINE UDragonFormComponent* GetFormComponent() const { return FormComponent; }
 	FORCEINLINE UDragonOverdriveComponent* GetOverdriveComponent() const { return OverdriveComponent; }
+
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Projectile", meta=(ClampMin=0.0, Units="cm"))
+	float ProjectileMaxDistance = 1500.0f;
 };

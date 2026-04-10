@@ -11,10 +11,20 @@ class COOKIEBROSPLATFORMER_API USaveDeveloperSettings : public USaveGame
 	GENERATED_BODY()
 
 public:
-	static USaveDeveloperSettings* LoadDeveloperSettingsFromSlot(const UObject* DeveloperWorldContextObject);
-	static USaveDeveloperSettings* LoadOrCreateDeveloperSettings(const UObject* DeveloperWorldContextObject);
-	static bool WriteDeveloperSettingsToSlot(const UObject* DeveloperWorldContextObject, USaveDeveloperSettings* DeveloperSaveObject);
+	void SetSnapshot(const FPlatformerDeveloperSettingsSnapshot& InSnapshot);
+	FPlatformerDeveloperSettingsSnapshot ResolveSnapshot() const;
+	bool UsesSnapshotData() const;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	int32 DataVersion = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FGuid SlotId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FPlatformerDeveloperSettingsSnapshot Snapshot;
+
+	// Legacy single-slot fields kept to migrate older developer save payloads.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	FDeveloperPlatformerCharacterSettings DeveloperCharacterSettings;
 
@@ -23,4 +33,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	bool bHasSavedDeveloperCombatSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bAutoRestartLevel = false;
 };

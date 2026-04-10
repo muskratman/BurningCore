@@ -2,6 +2,8 @@
 
 #include "Editor.h"
 #include "FileHelpers.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/PlayerStart.h"
 #include "GameFramework/WorldSettings.h"
@@ -1102,6 +1104,19 @@ namespace CookieBrosPaperTileMapImport
 			SpawnedActor->SetActorLabel(ActorLabel);
 			SpawnedActor->RerunConstructionScripts();
 			++SpawnedActorCount;
+
+			if (PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::GenericActor)
+			{
+				if (ACharacter* SpawnedCharacter = Cast<ACharacter>(SpawnedActor))
+				{
+					if (const UCapsuleComponent* CapsuleComponent = SpawnedCharacter->GetCapsuleComponent())
+					{
+						FVector AdjustedLocation = SpawnedCharacter->GetActorLocation();
+						AdjustedLocation.Z = FinalLocation.Z + CapsuleComponent->GetScaledCapsuleHalfHeight();
+						SpawnedCharacter->SetActorLocation(AdjustedLocation, false, nullptr, ETeleportType::TeleportPhysics);
+					}
+				}
+			}
 
 			if (bIsPrimaryPlayerStart)
 			{

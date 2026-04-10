@@ -14,5 +14,5 @@ class DRAGONSLAYER_API AEnemyFlying : public APlatformerEnemyFlying
 	GENERATED_BODY()
 
 public:
-	AEnemyFlying();
+	AEnemyFlying(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

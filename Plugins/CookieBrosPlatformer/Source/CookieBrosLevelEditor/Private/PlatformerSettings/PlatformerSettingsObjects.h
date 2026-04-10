@@ -5,6 +5,7 @@
 #include "PlatformerSettingsObjects.generated.h"
 
 class AActor;
+class APlatformerTeleporter;
 
 UCLASS(Abstract, Transient)
 class UPlatformerActorSettingsObject : public UObject
@@ -55,6 +56,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Damage Cooldown"))
 	float DamageCooldown = 0.35f;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="cm/s", DisplayName="Upward Impulse"))
+	float UpwardImpulse = 250.0f;
 };
 
 UCLASS(Transient)
@@ -226,14 +230,14 @@ public:
 	virtual void PullFromActor(AActor* Actor) override;
 	virtual void PushToActor() override;
 
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Teleporter ID"))
+	FString TeleporterId;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Exit Teleporter"))
+	TObjectPtr<APlatformerTeleporter> ExitTeleporter;
+
 	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point A"))
 	FVector PointA = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point B"))
-	FVector PointB = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Two-Sided Teleport"))
-	bool bTwoSidedTeleport = false;
 };
 
 UCLASS(Transient)

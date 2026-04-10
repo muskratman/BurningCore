@@ -11,8 +11,7 @@ class UInputAction;
 
 /**
  *  A simple platformer player controller
- *  Manages input mappings
- *  Respawns the player pawn at the player start if it is destroyed
+ *  Manages input mappings and the defeat flow for the controlled player character.
  */
 UCLASS(Config="Game")
 class APlatformerPlayerController : public APlatformerPlayerControllerBase
@@ -33,9 +32,12 @@ protected:
 
 protected:
 	virtual void SetupInputComponent() override;
+	virtual void HandleControlledCharacterDeath() override;
 	virtual APawn* SpawnRespawnPawn(const FTransform& SpawnTransform) override;
 	virtual void HandlePauseRequested() override;
 
 private:
 	void HandleDeveloperSettingsToggleRequested();
+	bool ShouldAutoRestartLevelAfterDefeat() const;
+	void RestartCurrentLevel();
 };

@@ -159,21 +159,6 @@ namespace PlatformerSettingsPrivate
 		return Cast<USceneComponent>(Property->GetObjectPropertyValue_InContainer(Actor));
 	}
 
-	APlatformerTeleporter* ResolveDestinationTeleporter(const AActor* Actor)
-	{
-		if (Actor == nullptr)
-		{
-			return nullptr;
-		}
-
-		const FObjectProperty* Property = FindFProperty<FObjectProperty>(Actor->GetClass(), TEXT("DestinationTeleporter"));
-		if (Property == nullptr)
-		{
-			return nullptr;
-		}
-
-		return Cast<APlatformerTeleporter>(Property->GetObjectPropertyValue_InContainer(Actor));
-	}
 }
 
 void UPlatformerConveyorSettingsObject::PullFromActor(AActor* Actor)
@@ -196,12 +181,14 @@ void UPlatformerDangerBlockSettingsObject::PullFromActor(AActor* Actor)
 	SetEditedActor(Actor);
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("DamageAmount"), Damage);
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("DamageCooldown"), DamageCooldown);
+	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("VerticalKnockback"), UpwardImpulse);
 }
 
 void UPlatformerDangerBlockSettingsObject::PushToActor()
 {
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(GetEditedActor(), TEXT("DamageAmount"), FMath::Max(0.0f, Damage));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(GetEditedActor(), TEXT("DamageCooldown"), FMath::Max(0.0f, DamageCooldown));
+	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(GetEditedActor(), TEXT("VerticalKnockback"), FMath::Max(0.0f, UpwardImpulse));
 }
 
 void UPlatformerDestructibleBlockSettingsObject::PullFromActor(AActor* Actor)
@@ -293,7 +280,8 @@ void UPlatformerMovingPlatformSettingsObject::PushToActor()
 		return;
 	}
 
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointA));
+	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
+	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), FVector::ZeroVector);
 	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointB));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), FMath::Max(1.0f, MoveSpeed));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("PointADelay"), FMath::Max(0.0f, PointADelay));
@@ -358,30 +346,30 @@ void UPlatformerTeleporterSettingsObject::PullFromActor(AActor* Actor)
 {
 	SetEditedActor(Actor);
 	PointA = Actor != nullptr ? Actor->GetActorLocation() : FVector::ZeroVector;
+	TeleporterId.Reset();
+	ExitTeleporter = nullptr;
 
-	if (USceneComponent* ExitPoint = PlatformerSettingsPrivate::ResolveSceneComponentProperty(Actor, TEXT("ExitPoint")))
-	{
-		PointB = ExitPoint->GetComponentLocation();
-	}
-	else
-	{
-		PointB = PointA;
-	}
+	PlatformerSettingsPrivate::GetTypedPropertyValue<FStrProperty>(Actor, TEXT("TeleporterId"), TeleporterId);
 
-	PlatformerSettingsPrivate::GetTypedPropertyValue<FBoolProperty>(Actor, TEXT("bTwoSidedTeleport"), bTwoSidedTeleport);
+	UObject* ExitTeleporterObject = nullptr;
+	if (PlatformerSettingsPrivate::GetTypedPropertyValue<FObjectProperty>(Actor, TEXT("ExitTeleporter"), ExitTeleporterObject))
+	{
+		ExitTeleporter = Cast<APlatformerTeleporter>(ExitTeleporterObject);
+	}
 }
 
 void UPlatformerTeleporterSettingsObject::PushToActor()
 {
 	AActor* Actor = GetEditedActor();
-	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
-
-	if (USceneComponent* ExitPoint = PlatformerSettingsPrivate::ResolveSceneComponentProperty(Actor, TEXT("ExitPoint")))
+	if (Actor == nullptr)
 	{
-		PlatformerSettingsPrivate::MoveSceneComponentInEditor(ExitPoint, PointB);
+		return;
 	}
 
-	PlatformerSettingsPrivate::SetTypedPropertyValue<FBoolProperty>(Actor, TEXT("bTwoSidedTeleport"), bTwoSidedTeleport);
+	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
+
+	PlatformerSettingsPrivate::SetTypedPropertyValue<FStrProperty>(Actor, TEXT("TeleporterId"), TeleporterId);
+	PlatformerSettingsPrivate::SetTypedPropertyValue<FObjectProperty>(Actor, TEXT("ExitTeleporter"), ExitTeleporter.Get());
 }
 
 void UPlatformerTriggeredLiftSettingsObject::PullFromActor(AActor* Actor)
@@ -406,7 +394,8 @@ void UPlatformerTriggeredLiftSettingsObject::PushToActor()
 		return;
 	}
 
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointA));
+	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
+	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), FVector::ZeroVector);
 	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointB));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), FMath::Max(1.0f, MoveSpeed));
 }

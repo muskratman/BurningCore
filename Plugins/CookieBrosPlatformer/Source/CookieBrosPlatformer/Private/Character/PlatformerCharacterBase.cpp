@@ -4,11 +4,16 @@
 #include "Camera/CameraComponent.h"
 #include "Character/SideViewMovementComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Core/SaveGame/SaveDeveloperSettings.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/WidgetComponent.h"
+#include "Core/PlatformerDeveloperSettingsSubsystem.h"
+#include "Core/PlatformerPlayerControllerBase.h"
+#include "Engine/GameInstance.h"
 #include "GAS/PlatformerGameplayTags.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 #include "GAS/PlatformerAbilitySet.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/DamageType.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Platformer/Environment/PlatformerLadder.h"
 
@@ -38,29 +43,15 @@ APlatformerCharacterBase::APlatformerCharacterBase(const FObjectInitializer& Obj
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
-}
-
-UAbilitySystemComponent* APlatformerCharacterBase::GetAbilitySystemComponent() const
-{
-	return AbilitySystemComponent;
-}
-
-void APlatformerCharacterBase::ApplyDamage(const FGameplayEffectSpecHandle& DamageSpec, const FHitResult& HitResult)
-{
-	if (!AbilitySystemComponent || !DamageSpec.IsValid())
+	if (AttributeSet)
 	{
-		return;
+		AttributeSet->InitMaxHealth(100.0f);
+		AttributeSet->InitHealth(100.0f);
+		AttributeSet->InitRangeBaseAttackDamage(25.0f);
+		AttributeSet->InitRangeChargedAttackDamage(75.0f);
 	}
 
-	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*DamageSpec.Data.Get());
-}
-
-bool APlatformerCharacterBase::IsAlive() const
-{
-	return AttributeSet && AttributeSet->GetHealth() > 0.0f;
+	UpdateHealthWidgetPlacement();
 }
 
 void APlatformerCharacterBase::InitializeAbilities(const UPlatformerAbilitySet* AbilitySet)
@@ -103,6 +94,23 @@ void APlatformerCharacterBase::ApplyDeveloperCharacterSettings(const FDeveloperP
 	ApplyDeveloperCombatSettings(DeveloperSettings.DeveloperCombatSettings);
 }
 
+void APlatformerCharacterBase::ApplyDeveloperSettingsSnapshot(const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot)
+{
+	ApplyDeveloperCameraSettings(DeveloperSettingsSnapshot.CharacterSettings.DeveloperCameraSettings);
+	ApplyDeveloperCharacterMovementSettings(DeveloperSettingsSnapshot.CharacterSettings.DeveloperCharacterMovementSettings);
+
+	if (DeveloperSettingsSnapshot.bHasSavedCombatSettings)
+	{
+		ApplyDeveloperCombatSettings(ResolveDeveloperCombatSettingsForApplication(
+			DeveloperSettingsSnapshot.CharacterSettings.DeveloperCombatSettings));
+	}
+	else
+	{
+		SetHasActiveDeveloperCombatSettings(false);
+		ActiveDeveloperCombatSettings = FDeveloperPlatformerCombatSettings();
+	}
+}
+
 FDeveloperPlatformerCharacterSettings APlatformerCharacterBase::CaptureDeveloperCharacterSettings() const
 {
 	FDeveloperPlatformerCharacterSettings DeveloperSettings;
@@ -110,6 +118,14 @@ FDeveloperPlatformerCharacterSettings APlatformerCharacterBase::CaptureDeveloper
 	DeveloperSettings.DeveloperCharacterMovementSettings = CaptureDeveloperCharacterMovementSettings();
 	DeveloperSettings.DeveloperCombatSettings = CaptureDeveloperCombatSettings();
 	return DeveloperSettings;
+}
+
+FPlatformerDeveloperSettingsSnapshot APlatformerCharacterBase::CaptureDeveloperSettingsSnapshot() const
+{
+	FPlatformerDeveloperSettingsSnapshot DeveloperSettingsSnapshot;
+	DeveloperSettingsSnapshot.CharacterSettings = CaptureDeveloperCharacterSettings();
+	DeveloperSettingsSnapshot.bHasSavedCombatSettings = HasActiveDeveloperCombatSettings();
+	return DeveloperSettingsSnapshot;
 }
 
 void APlatformerCharacterBase::NotifyLadderAvailable(APlatformerLadder* Ladder)
@@ -267,7 +283,6 @@ void APlatformerCharacterBase::BeginPlay()
 
 	if (AbilitySystemComponent)
 	{
-		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 		InitializeAbilities(DefaultAbilitySet);
 	}
 
@@ -301,6 +316,62 @@ void APlatformerCharacterBase::SetupPlayerInputComponent(UInputComponent* Player
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	// Input binding lives in higher-level player/controller shells.
+}
+
+void APlatformerCharacterBase::FellOutOfWorld(const UDamageType& DamageType)
+{
+	if (AttributeSet && AttributeSet->GetHealth() > 0.0f)
+	{
+		AttributeSet->SetHealth(0.0f);
+		SyncCombatLifeStateFromAttributes();
+	}
+}
+
+void APlatformerCharacterBase::OnCombatDeath(AActor* DamageInstigatorActor)
+{
+	Super::OnCombatDeath(DamageInstigatorActor);
+
+	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
+	{
+		CharacterMesh->SetHiddenInGame(true, true);
+		CharacterMesh->SetVisibility(false, true);
+	}
+
+	if (UCapsuleComponent* CapsuleComponent = GetCapsuleComponent())
+	{
+		CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (HealthWidgetComponent)
+	{
+		HealthWidgetComponent->SetVisibility(false);
+	}
+
+	if (APlatformerPlayerControllerBase* PlatformerPlayerController = Cast<APlatformerPlayerControllerBase>(GetController()))
+	{
+		PlatformerPlayerController->HandleControlledCharacterDeath();
+	}
+}
+
+void APlatformerCharacterBase::OnCombatRevived()
+{
+	Super::OnCombatRevived();
+
+	if (USkeletalMeshComponent* CharacterMesh = GetMesh())
+	{
+		CharacterMesh->SetHiddenInGame(false, true);
+		CharacterMesh->SetVisibility(true, true);
+	}
+
+	if (UCapsuleComponent* CapsuleComponent = GetCapsuleComponent())
+	{
+		CapsuleComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+
+	if (HealthWidgetComponent)
+	{
+		RefreshHealthWidget();
+	}
 }
 
 void APlatformerCharacterBase::OnEnteredLadder(APlatformerLadder* Ladder)
@@ -494,6 +565,9 @@ void APlatformerCharacterBase::ApplyDeveloperCombatSettings(const FDeveloperPlat
 			DeveloperRangeAttackDelayAttribute,
 			FMath::Max(0.0f, DeveloperCombatSettings.DeveloperCombatRangeAttackDelay));
 	}
+
+	RefreshHealthWidget();
+	SyncCombatLifeStateFromAttributes();
 }
 
 FDeveloperPlatformerCombatSettings APlatformerCharacterBase::CaptureDeveloperCombatSettings() const
@@ -558,28 +632,45 @@ FDeveloperPlatformerCombatSettings APlatformerCharacterBase::CaptureDeveloperCom
 	return DeveloperCombatSettings;
 }
 
+FDeveloperPlatformerCombatSettings APlatformerCharacterBase::ResolveDeveloperCombatSettingsForApplication(
+	const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings) const
+{
+	FDeveloperPlatformerCombatSettings ResolvedDeveloperCombatSettings = DeveloperCombatSettings;
+	const bool bUsesLegacyCombatDefaults =
+		FMath::IsNearlyEqual(ResolvedDeveloperCombatSettings.DeveloperCombatMaxHealth, 10.0f)
+		&& FMath::IsNearlyEqual(ResolvedDeveloperCombatSettings.DeveloperCombatCurrentHealth, 10.0f)
+		&& FMath::IsNearlyEqual(ResolvedDeveloperCombatSettings.DeveloperCombatRangeBaseAttackDamage, 1.0f)
+		&& FMath::IsNearlyEqual(ResolvedDeveloperCombatSettings.DeveloperCombatRangeChargedAttackDamage, 1.0f);
+
+	if (bUsesLegacyCombatDefaults)
+	{
+		ResolvedDeveloperCombatSettings.DeveloperCombatMaxHealth = 100.0f;
+		ResolvedDeveloperCombatSettings.DeveloperCombatCurrentHealth = 100.0f;
+		ResolvedDeveloperCombatSettings.DeveloperCombatRangeBaseAttackDamage = 25.0f;
+		ResolvedDeveloperCombatSettings.DeveloperCombatRangeChargedAttackDamage = 75.0f;
+	}
+
+	return ResolvedDeveloperCombatSettings;
+}
+
 void APlatformerCharacterBase::LoadAndApplyDeveloperSettings()
 {
-	if (USaveDeveloperSettings* LoadedDeveloperSettings = USaveDeveloperSettings::LoadDeveloperSettingsFromSlot(this))
+	if (UGameInstance* GameInstance = GetGameInstance())
 	{
-		ApplyDeveloperCameraSettings(LoadedDeveloperSettings->DeveloperCharacterSettings.DeveloperCameraSettings);
-		ApplyDeveloperCharacterMovementSettings(LoadedDeveloperSettings->DeveloperCharacterSettings.DeveloperCharacterMovementSettings);
+		if (UPlatformerDeveloperSettingsSubsystem* DeveloperSettingsSubsystem =
+			GameInstance->GetSubsystem<UPlatformerDeveloperSettingsSubsystem>())
+		{
+			FPlatformerDeveloperSettingsSnapshot DeveloperSettingsSnapshot;
+			if (DeveloperSettingsSubsystem->TryLoadCurrentSnapshot(DeveloperSettingsSnapshot))
+			{
+				ApplyDeveloperSettingsSnapshot(DeveloperSettingsSnapshot);
+				return;
+			}
+		}
+	}
 
-		if (LoadedDeveloperSettings->bHasSavedDeveloperCombatSettings)
-		{
-			ApplyDeveloperCombatSettings(LoadedDeveloperSettings->DeveloperCharacterSettings.DeveloperCombatSettings);
-		}
-		else
-		{
-			SetHasActiveDeveloperCombatSettings(false);
-			ActiveDeveloperCombatSettings = FDeveloperPlatformerCombatSettings();
-		}
-	}
-	else
-	{
-		SetHasActiveDeveloperCombatSettings(false);
-		ActiveDeveloperCombatSettings = FDeveloperPlatformerCombatSettings();
-	}
+	SetHasActiveDeveloperCombatSettings(false);
+	ActiveDeveloperCombatSettings = FDeveloperPlatformerCombatSettings();
 }
 
 void APlatformerCharacterBase::SetHasActiveDeveloperCombatSettings(bool bInHasActiveDeveloperCombatSettings)
@@ -595,4 +686,9 @@ bool APlatformerCharacterBase::HasActiveDeveloperCombatSettings() const
 const FDeveloperPlatformerCombatSettings& APlatformerCharacterBase::GetActiveDeveloperCombatSettings() const
 {
 	return ActiveDeveloperCombatSettings;
+}
+
+float APlatformerCharacterBase::GetHealthWidgetVerticalPadding() const
+{
+	return PlatformerHealthWidgetVerticalPadding;
 }

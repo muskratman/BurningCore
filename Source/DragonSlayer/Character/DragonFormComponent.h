@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
+#include "Traversal/PlatformerTraversalTypes.h"
 #include "DragonFormComponent.generated.h"
 
 class UDragonFormDataAsset;
@@ -25,6 +26,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Form")
 	const UDragonFormDataAsset* GetActiveFormData() const;
 
+	bool TryGetResolvedChargeShotTuning(FPlatformerChargeShotTuning& OutChargeShotTuning) const;
+	void SetDeveloperChargeShotTuningOverride(const FPlatformerChargeShotTuning& InChargeShotTuning);
+	void ClearDeveloperChargeShotTuningOverride();
+	bool HasDeveloperChargeShotTuningOverride() const { return bHasDeveloperChargeShotTuningOverride; }
+
 	UFUNCTION(BlueprintPure, Category="Form")
 	FGameplayTag GetActiveFormTag() const { return ActiveFormTag; }
 
@@ -41,4 +47,10 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category="Form")
 	FGameplayTag ActiveFormTag;
+
+	UPROPERTY(Transient)
+	bool bHasDeveloperChargeShotTuningOverride = false;
+
+	UPROPERTY(Transient)
+	FPlatformerChargeShotTuning DeveloperChargeShotTuningOverride;
 };

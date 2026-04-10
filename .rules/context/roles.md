@@ -1,56 +1,63 @@
-# Roles: BurningCORE
+# Roles: DragonSlayer
 
 ## Architect (Архітектор)
 
 **Область:** весь проект
-**Фокус:** архітектура, базові класи, модульна структура, review, рефакторинг
+**Фокус:** архітектура, reusable platformer foundation, модульні межі, docs/rules, review, рефакторинг
 
 | Читає | Пише |
 |---|---|
-| Все | Base класи (BurningCORE*.h/.cpp) |
-| | Build.cs, .uproject |
-| | Структурні рішення (нові Variant_*) |
-| | .rules/ файли |
+| Все | `Plugins/CookieBrosPlatformer/**` |
+| | `Source/DragonSlayer/Core/**` |
+| | `Source/DragonSlayer/Platformer/Base/**` |
+| | `Source/DragonSlayer/DragonSlayer*.{h,cpp}` |
+| | `Build.cs`, `.uproject`, `.rules/`, `Docs/` |
 
-**Коли активувати:** зміни в базових класах, нові модулі, архітектурні рішення, Build.cs
+**Коли активувати:** зміни в reusable base-класах, перенесення логіки між plugin і source, нові модулі, Build.cs, `.uproject`, docs/rules, архітектурні рішення
 
 ---
 
 ## Gameplay
 
-**Область:** Variant_*/ (крім UI/)
-**Фокус:** ігрові механіки, AI (StateTree), анімація, інтерфейси
+**Область:** project-specific gameplay у `Source/DragonSlayer/` (крім UI)
+**Фокус:** ігрові механіки, AI (StateTree), GAS, projectiles, data assets, traversal glue, enemy behaviors
 
 | Читає | Пише |
 |---|---|
-| .rules/ | Variant_*/{Gameplay,AI,Animation,Interfaces}/*.h/.cpp |
-| Variant_*/ (весь) | Нові gameplay класи |
-| Base класи (read-only) | AnimNotify, StateTree tasks, EQS contexts |
+| `.rules/`, `Docs/` | `Source/DragonSlayer/Character/**` |
+| `Plugins/CookieBrosPlatformer/**` (read-only) | `Source/DragonSlayer/AI/**` |
+| Весь `Source/DragonSlayer/**` | `Source/DragonSlayer/GAS/**` |
+| | `Source/DragonSlayer/Data/**` |
+| | `Source/DragonSlayer/Systems/**` |
+| | `Source/DragonSlayer/Projectiles/**` |
+| | `Source/DragonSlayer/Platformer/**` для project-specific gameplay glue |
 
-**Коли активувати:** нові механіки, AI поведінка, combat система, platforming логіка, анімації
+**Коли активувати:** нові механіки Dragon, AI поведінка, combat система, project-specific platforming логіка, abilities, enemy content, data-driven tuning
 
-**⚠️ Ескалація до Architect:** зміни в базових класах, новий Variant_*, нові модулі в Build.cs
+**⚠️ Ескалація до Architect:** якщо механіка має стати reusable для інших platformer-проектів, якщо треба міняти plugin base, `Build.cs`, `.uproject` або проектну архітектуру
 
 ---
 
 ## UI
 
 **Область:** UMG віджети, HUD, меню
-**Фокус:** UMG widgets (C++ base), Slate-елементи, HUD layout
+**Фокус:** game-specific UMG widgets, HUD, pause/main menu, UI glue до gameplay даних
 
 | Читає | Пише |
 |---|---|
-| .rules/ | Variant_*/UI/*.h/.cpp |
-| Variant_*/UI/ | Content/UI/ (Blueprint widgets) |
-| Base класи (read-only) | Нові UMG/Slate класи |
+| `.rules/`, `Docs/` | `Source/DragonSlayer/UI/**` |
+| `Source/DragonSlayer/**` | `Source/DragonSlayer/Core/UI/**` |
+| `Plugins/CookieBrosPlatformer/Public/UI/**` (read-only) | project UI Blueprints / widget assets |
+| | нові UMG/Slate класи в project layer |
 
-**Коли активувати:** health bars, HUD елементи, меню, UI-анімації
+**Коли активувати:** health bars, HUD елементи, pause menu, main menu, defeat/dev settings UI, UI-анімації
 
-**⚠️ Ескалація до Architect:** нові UI-модулі поза Variant_*/UI/, зміни в Build.cs (Slate)
+**⚠️ Ескалація до Architect:** зміни в reusable UI shells у плагіні, нові UI-модулі, зміни в `Build.cs`, зміни в загальній UI-архітектурі
 
 ## Conflict Resolution
 
 1. Ролі НЕ перетинаються по write-доступу
-2. Gameplay НЕ чіпає UI/, UI НЕ чіпає Gameplay/
-3. Зміни в Base класах → тільки Architect
-4. При конфлікті: Architect має пріоритет
+2. Reusable platformer foundation у плагіні — зона Architect, якщо не погоджено інакше
+3. Gameplay НЕ чіпає `Source/DragonSlayer/UI`, UI НЕ чіпає project gameplay системи без потреби
+4. Generic mechanic → plugin, DragonSlayer-specific mechanic → `Source/DragonSlayer`
+5. При конфлікті: Architect має пріоритет

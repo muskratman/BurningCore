@@ -1,13 +1,13 @@
-#include "GAS/Abilities/GA_Crouch.h"
+#include "GAS/Abilities/GA_PlatformerCrouch.h"
 
 #include "GameFramework/Character.h"
 
-UGA_Crouch::UGA_Crouch()
+UGA_PlatformerCrouch::UGA_PlatformerCrouch()
 {
 	InstancingPolicy = EGameplayAbilityInstancingPolicy::InstancedPerActor;
 }
 
-bool UGA_Crouch::CanActivateAbility(
+bool UGA_PlatformerCrouch::CanActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTagContainer* SourceTags,
@@ -23,7 +23,7 @@ bool UGA_Crouch::CanActivateAbility(
 	return (Character != nullptr) && Character->CanCrouch() && !Character->bIsCrouched;
 }
 
-void UGA_Crouch::ActivateAbility(
+void UGA_PlatformerCrouch::ActivateAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo,
@@ -44,7 +44,7 @@ void UGA_Crouch::ActivateAbility(
 	}
 }
 
-void UGA_Crouch::InputReleased(
+void UGA_PlatformerCrouch::InputReleased(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo)
@@ -60,7 +60,7 @@ void UGA_Crouch::InputReleased(
 	EndAbility(Handle, ActorInfo, ActivationInfo, true, false);
 }
 
-void UGA_Crouch::CancelAbility(
+void UGA_PlatformerCrouch::CancelAbility(
 	const FGameplayAbilitySpecHandle Handle,
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayAbilityActivationInfo ActivationInfo,
@@ -68,7 +68,7 @@ void UGA_Crouch::CancelAbility(
 {
 	if (ScopeLockCount > 0)
 	{
-		WaitingToExecute.Add(FPostLockDelegate::CreateUObject(this, &UGA_Crouch::CancelAbility, Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility));
+		WaitingToExecute.Add(FPostLockDelegate::CreateUObject(this, &UGA_PlatformerCrouch::CancelAbility, Handle, ActorInfo, ActivationInfo, bReplicateCancelAbility));
 		return;
 	}
 

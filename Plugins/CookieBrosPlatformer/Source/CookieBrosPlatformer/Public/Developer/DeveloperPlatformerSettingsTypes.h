@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Traversal/PlatformerTraversalTypes.h"
 #include "DeveloperPlatformerSettingsTypes.generated.h"
 
 USTRUCT(BlueprintType)
@@ -74,10 +75,10 @@ struct COOKIEBROSPLATFORMER_API FDeveloperPlatformerCombatSettings
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
-	float DeveloperCombatMaxHealth = 10.0f;
+	float DeveloperCombatMaxHealth = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
-	float DeveloperCombatCurrentHealth = 10.0f;
+	float DeveloperCombatCurrentHealth = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	float DeveloperCombatMeleeAttackDamage = 1.0f;
@@ -86,13 +87,13 @@ struct COOKIEBROSPLATFORMER_API FDeveloperPlatformerCombatSettings
 	float DeveloperCombatMeleeAttackDelay = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
-	float DeveloperCombatRangeBaseAttackDamage = 1.0f;
+	float DeveloperCombatRangeBaseAttackDamage = 25.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	float DeveloperCombatRangeBaseAttackSpeed = 2000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
-	float DeveloperCombatRangeChargedAttackDamage = 1.0f;
+	float DeveloperCombatRangeChargedAttackDamage = 75.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	float DeveloperCombatRangeChargedAttackSpeed = 2000.0f;
@@ -114,6 +115,18 @@ struct COOKIEBROSPLATFORMER_API FDeveloperPlatformerCharacterSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	FDeveloperPlatformerCombatSettings DeveloperCombatSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FPlatformerChargeShotTuning DeveloperChargeShotSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FPlatformerLedgeTraversalSettings DeveloperLedgeSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FPlatformerSlideDashSettings DeveloperSlideDashSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FPlatformerWallTraversalSettings DeveloperWallSettings;
 };
 
 USTRUCT(BlueprintType)
@@ -139,4 +152,46 @@ struct COOKIEBROSPLATFORMER_API FDeveloperPlatformerCameraManagerSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	float DeveloperCameraManagerVerticalOffsetInterpSpeed = 2.0f;
+};
+
+USTRUCT(BlueprintType)
+struct COOKIEBROSPLATFORMER_API FPlatformerDeveloperSettingsSnapshot
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FDeveloperPlatformerCharacterSettings CharacterSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FDeveloperPlatformerCameraManagerSettings CameraManagerSettings;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedCombatSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedChargeShotSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedTraversalSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bAutoRestartLevel = false;
+};
+
+USTRUCT(BlueprintType)
+struct COOKIEBROSPLATFORMER_API FPlatformerDeveloperSettingsSlotDescriptor
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FGuid SlotId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FString DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FDateTime CreatedAtUtc;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	FDateTime UpdatedAtUtc;
 };

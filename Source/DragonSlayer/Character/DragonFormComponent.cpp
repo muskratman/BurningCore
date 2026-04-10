@@ -43,3 +43,31 @@ const UDragonFormDataAsset* UDragonFormComponent::GetActiveFormData() const
 	}
 	return nullptr;
 }
+
+bool UDragonFormComponent::TryGetResolvedChargeShotTuning(FPlatformerChargeShotTuning& OutChargeShotTuning) const
+{
+	if (bHasDeveloperChargeShotTuningOverride)
+	{
+		OutChargeShotTuning = DeveloperChargeShotTuningOverride;
+		return true;
+	}
+
+	if (const UDragonFormDataAsset* ActiveFormData = GetActiveFormData())
+	{
+		OutChargeShotTuning = ActiveFormData->GetResolvedChargeShotTuning();
+		return true;
+	}
+
+	return false;
+}
+
+void UDragonFormComponent::SetDeveloperChargeShotTuningOverride(const FPlatformerChargeShotTuning& InChargeShotTuning)
+{
+	bHasDeveloperChargeShotTuningOverride = true;
+	DeveloperChargeShotTuningOverride = InChargeShotTuning;
+}
+
+void UDragonFormComponent::ClearDeveloperChargeShotTuningOverride()
+{
+	bHasDeveloperChargeShotTuningOverride = false;
+}

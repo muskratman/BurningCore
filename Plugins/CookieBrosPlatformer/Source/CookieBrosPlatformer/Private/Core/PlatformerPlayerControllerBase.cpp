@@ -81,6 +81,11 @@ void APlatformerPlayerControllerBase::OnPossess(APawn* InPawn)
 
 void APlatformerPlayerControllerBase::OnPawnDestroyed(AActor* DestroyedActor)
 {
+	if (!bAutoRespawnOnPawnDestroyed)
+	{
+		return;
+	}
+
 	FTransform SpawnTransform;
 	if (!TryGetRespawnTransform(SpawnTransform))
 	{
@@ -91,6 +96,10 @@ void APlatformerPlayerControllerBase::OnPawnDestroyed(AActor* DestroyedActor)
 	{
 		Possess(RespawnedPawn);
 	}
+}
+
+void APlatformerPlayerControllerBase::HandleControlledCharacterDeath()
+{
 }
 
 bool APlatformerPlayerControllerBase::ShouldUseTouchControls() const

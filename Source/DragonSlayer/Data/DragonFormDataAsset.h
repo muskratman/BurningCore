@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
+#include "Traversal/PlatformerTraversalTypes.h"
 #include "DragonFormDataAsset.generated.h"
 class ADragonProjectile;
 class UGameplayEffect;
@@ -19,6 +20,8 @@ class DRAGONSLAYER_API UDragonFormDataAsset : public UPrimaryDataAsset
 	GENERATED_BODY()
 	
 public:
+	FPlatformerChargeShotTuning GetResolvedChargeShotTuning() const;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Identity")
 	FGameplayTag FormTag;
 
@@ -30,6 +33,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
 	TSubclassOf<ADragonProjectile> ChargeProjectileClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
+	TSubclassOf<ADragonProjectile> PartialChargeProjectileClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat")
 	TSubclassOf<UGameplayEffect> OnHitStatusEffect;
@@ -48,6 +54,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Charge")
 	float ChargeTime = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Charge")
+	FPlatformerChargeShotTuning ChargeShotTuning;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Visuals")
 	TObjectPtr<UMaterialInterface> CharacterOverlayMaterial;

@@ -14,5 +14,5 @@ class DRAGONSLAYER_API ABossBase : public APlatformerBossBase
 	GENERATED_BODY()
 
 public:
-	ABossBase();
+	ABossBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

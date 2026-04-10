@@ -14,5 +14,5 @@ class DRAGONSLAYER_API AEnemyRanged : public APlatformerEnemyRanged
 	GENERATED_BODY()
 	
 public:
-	AEnemyRanged();
+	AEnemyRanged(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

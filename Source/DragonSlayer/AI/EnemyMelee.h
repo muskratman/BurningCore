@@ -14,5 +14,5 @@ class DRAGONSLAYER_API AEnemyMelee : public APlatformerEnemyMelee
 	GENERATED_BODY()
 	
 public:
-	AEnemyMelee();
+	AEnemyMelee(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

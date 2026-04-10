@@ -2,14 +2,14 @@
 #include "GameplayEffectExtension.h"
 
 UPlatformerCharacterAttributeSet::UPlatformerCharacterAttributeSet()
-	: Health(10.0f)
-	, MaxHealth(10.0f)
+	: Health(100.0f)
+	, MaxHealth(100.0f)
 	, BaseDamage(1.0f)
 	, AttackSpeed(1.0f)
 	, MeleeAttackDamage(1.0f)
 	, MeleeAttackDelay(0.0f)
-	, RangeBaseAttackDamage(1.0f)
-	, RangeChargedAttackDamage(1.0f)
+	, RangeBaseAttackDamage(25.0f)
+	, RangeChargedAttackDamage(75.0f)
 	, RangeAttackDelay(0.0f)
 	, MoveSpeed(600.0f)
 	, JumpHeight(600.0f)

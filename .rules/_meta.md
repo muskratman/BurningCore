@@ -15,7 +15,7 @@
 |---|---|
 | `_index.md` | Role identity, core context, global permissions |
 | `_meta.md` | Version tracking, sizing, change log |
-| `core/architecture.md` | Variant setup, layers, major design decisions |
+| `core/architecture.md` | Plugin vs project ownership, layers, major design decisions |
 | `core/constraints.md` | Rule constraints, C++ strict styles, path policies |
 | `context/task.md` | Current active agent task / checklist |
 | `context/roles.md` | Definitions for Architect, Gameplay, UI modes |
@@ -26,3 +26,4 @@
 ## Change Log
 
 - **2026-03-24**: Initial generation (Phase 3) based on Third Person UE5 prototype. 10 files created.
+- **2026-04-09**: Updated for DragonSlayer on UE 5.6. Replaced legacy single-module/variant assumptions with CookieBrosPlatformer + Source/DragonSlayer ownership model.

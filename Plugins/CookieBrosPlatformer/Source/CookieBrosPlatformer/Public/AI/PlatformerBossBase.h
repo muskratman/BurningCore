@@ -14,7 +14,7 @@ class COOKIEBROSPLATFORMER_API APlatformerBossBase : public APlatformerEnemyBase
 	GENERATED_BODY()
 
 public:
-	APlatformerBossBase();
+	APlatformerBossBase(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss")
 	FText BossEncounterName;
@@ -27,6 +27,15 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual float GetDefaultMaxHealth() const override;
+	virtual float GetProjectileMaxDistance() const override;
+	virtual float GetHealthWidgetVerticalPadding() const override;
 
 	int32 CurrentPhase = 1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI", meta=(ClampMin=0.0, Units="cm"))
+	float BossHealthWidgetVerticalPadding = 60.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Projectile", meta=(ClampMin=0.0, Units="cm"))
+	float BossProjectileMaxDistance = 1500.0f;
 };
