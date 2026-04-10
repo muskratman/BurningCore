@@ -19,7 +19,7 @@ UCLASS(Abstract)
 class COOKIEBROSPLATFORMER_API UPlatformerDeveloperSettingsWidget : public UUserWidget
 {
 	GENERATED_BODY()
-
+//
 public:
 	UFUNCTION(BlueprintCallable, Category="Developer")
 	void RefreshDeveloperSettingsWidget();

@@ -16,6 +16,12 @@ DerivedDataCache/
 Plugins/**/Binaries/
 Plugins/**/Intermediate/
 
+DragonSlayer (IOS).xcworkspace/
+DragonSlayer (Mac).xcworkspace/
+Git Commands.txt
+PROJECT_RES/
+
+
 # Compiled Java class files
 *.class
 
