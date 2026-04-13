@@ -680,8 +680,8 @@ float APlatformerCharacterBase::ResolveStandingCapsuleHalfHeight() const
 void APlatformerCharacterBase::ApplyResolvedCrouchCapsuleScale()
 {
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	UCapsuleComponent* CapsuleComponent = GetCapsuleComponent();
-	if (!MovementComponent || !CapsuleComponent)
+	UCapsuleComponent* CharacterCapsule = GetCapsuleComponent();
+	if (!MovementComponent || !CharacterCapsule)
 	{
 		return;
 	}
@@ -694,7 +694,7 @@ void APlatformerCharacterBase::ApplyResolvedCrouchCapsuleScale()
 
 	const float ResolvedCrouchCapsuleScale = ResolveDeveloperCrouchCapsuleScale(ResolveDefaultCrouchCapsuleScale());
 	const float ResolvedCrouchedHalfHeight = FMath::Max(
-		CapsuleComponent->GetUnscaledCapsuleRadius(),
+		CharacterCapsule->GetUnscaledCapsuleRadius(),
 		StandingCapsuleHalfHeight * ResolvedCrouchCapsuleScale);
 	MovementComponent->SetCrouchedHalfHeight(ResolvedCrouchedHalfHeight);
 
