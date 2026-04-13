@@ -1,5 +1,7 @@
 #include "Character/SideViewMovementComponent.h"
 
+#include "Traversal/PlatformerTraversalMovementComponent.h"
+
 USideViewMovementComponent::USideViewMovementComponent()
 {
 	bConstrainToPlane = true;
@@ -45,9 +47,35 @@ void USideViewMovementComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	GravityScale = DesiredGravityScale;
 }
 
+void USideViewMovementComponent::CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration)
+{
+	if (ShouldSuppressFallingJumpBraking())
+	{
+		const float SavedBrakingFrictionFactor = BrakingFrictionFactor;
+		BrakingFrictionFactor = 0.0f;
+		Super::CalcVelocity(DeltaTime, Friction, bFluid, 0.0f);
+		BrakingFrictionFactor = SavedBrakingFrictionFactor;
+		UpdateJumpHorizontalSpeedProtection();
+		return;
+	}
+
+	Super::CalcVelocity(DeltaTime, Friction, bFluid, BrakingDeceleration);
+	UpdateJumpHorizontalSpeedProtection();
+}
+
 void USideViewMovementComponent::PhysCustom(float DeltaTime, int32 Iterations)
 {
 	Super::PhysCustom(DeltaTime, Iterations);
+}
+
+void USideViewMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode)
+{
+	Super::OnMovementModeChanged(PreviousMovementMode, PreviousCustomMode);
+
+	if (MovementMode != MOVE_Falling)
+	{
+		ClearJumpHorizontalSpeedProtection();
+	}
 }
 
 void USideViewMovementComponent::SetDepthLane(float NewY, float TransitionTime)
@@ -91,5 +119,101 @@ void USideViewMovementComponent::EnforceDepthLock(float DeltaTime)
 			CurrentLocation.Y = LockedDepthY;
 			UpdatedComponent->SetWorldLocation(CurrentLocation, false, nullptr, ETeleportType::TeleportPhysics);
 		}
+	}
+}
+
+void USideViewMovementComponent::NotifyJumpHorizontalSpeedApplied(float HorizontalSpeed, float DirectionSign)
+{
+	if (HorizontalSpeed <= MaxWalkSpeed || FMath::IsNearlyZero(DirectionSign))
+	{
+		ClearJumpHorizontalSpeedProtection();
+		return;
+	}
+
+	bHasJumpHorizontalSpeedProtection = true;
+	ProtectedJumpDirectionSign = FMath::Sign(DirectionSign);
+	UpdateJumpHorizontalSpeedProtection();
+}
+
+bool USideViewMovementComponent::ShouldSuppressFallingJumpBraking() const
+{
+	if (!bHasJumpHorizontalSpeedProtection || !IsFalling())
+	{
+		return false;
+	}
+
+	if (FMath::IsNearlyZero(ProtectedJumpDirectionSign))
+	{
+		return false;
+	}
+
+	if (!IsJumpHorizontalSpeedInputHeld())
+	{
+		return false;
+	}
+
+	const float CurrentAlignedSpeed = Velocity.X * ProtectedJumpDirectionSign;
+	return CurrentAlignedSpeed > MaxWalkSpeed;
+}
+
+bool USideViewMovementComponent::IsJumpHorizontalSpeedInputHeld() const
+{
+	if (FMath::IsNearlyZero(ProtectedJumpDirectionSign))
+	{
+		return false;
+	}
+
+	float HorizontalInput = 0.0f;
+
+	if (const UPlatformerTraversalMovementComponent* TraversalMovementComponent = Cast<UPlatformerTraversalMovementComponent>(this))
+	{
+		HorizontalInput = TraversalMovementComponent->GetTraversalInputVector().X;
+		if (FMath::IsNearlyZero(HorizontalInput))
+		{
+			return false;
+		}
+
+		return FMath::Sign(HorizontalInput) == ProtectedJumpDirectionSign;
+	}
+
+	HorizontalInput = Acceleration.X;
+
+	if (FMath::IsNearlyZero(HorizontalInput))
+	{
+		return false;
+	}
+
+	return FMath::Sign(HorizontalInput) == ProtectedJumpDirectionSign;
+}
+
+void USideViewMovementComponent::ClearJumpHorizontalSpeedProtection()
+{
+	bHasJumpHorizontalSpeedProtection = false;
+	ProtectedJumpDirectionSign = 0.0f;
+}
+
+void USideViewMovementComponent::UpdateJumpHorizontalSpeedProtection()
+{
+	if (!bHasJumpHorizontalSpeedProtection)
+	{
+		return;
+	}
+
+	if (!IsFalling() || FMath::IsNearlyZero(ProtectedJumpDirectionSign))
+	{
+		ClearJumpHorizontalSpeedProtection();
+		return;
+	}
+
+	if (!IsJumpHorizontalSpeedInputHeld())
+	{
+		ClearJumpHorizontalSpeedProtection();
+		return;
+	}
+
+	const float CurrentAlignedSpeed = Velocity.X * ProtectedJumpDirectionSign;
+	if (CurrentAlignedSpeed <= MaxWalkSpeed)
+	{
+		ClearJumpHorizontalSpeedProtection();
 	}
 }

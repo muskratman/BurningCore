@@ -669,9 +669,24 @@ void UPlatformerTraversalMovementComponent::ApplySlideDashCapsule()
 		return;
 	}
 
+	float SlideDashCapsuleScale = FMath::Max(SlideDashSettings.DashHitboxScale, 0.0f);
+	float StandingCapsuleHalfHeight = CachedCapsuleState.UnscaledHalfHeight;
+	if (const APlatformerCharacterBase* PlatformerCharacter = Cast<APlatformerCharacterBase>(CharacterOwner))
+	{
+		SlideDashCapsuleScale = PlatformerCharacter->ResolveDeveloperCrouchCapsuleScale(SlideDashCapsuleScale);
+
+		if (const ACharacter* DefaultCharacter = CharacterOwner->GetClass()->GetDefaultObject<ACharacter>())
+		{
+			if (const UCapsuleComponent* DefaultCapsuleComponent = DefaultCharacter->GetCapsuleComponent())
+			{
+				StandingCapsuleHalfHeight = DefaultCapsuleComponent->GetUnscaledCapsuleHalfHeight();
+			}
+		}
+	}
+
 	const float NewUnscaledHalfHeight = FMath::Max(
 		CachedCapsuleState.UnscaledRadius,
-		CachedCapsuleState.UnscaledHalfHeight * SlideDashSettings.DashHitboxScale);
+		StandingCapsuleHalfHeight * SlideDashCapsuleScale);
 	const float HeightDelta = (CachedCapsuleState.UnscaledHalfHeight - NewUnscaledHalfHeight) * CachedCapsuleState.ShapeScale;
 
 	CapsuleComponent->SetCapsuleSize(CachedCapsuleState.UnscaledRadius, NewUnscaledHalfHeight, true);

@@ -96,6 +96,11 @@ void UPlatformerDeveloperSettingsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	if (Movement_ShowJumpTrajectory)
+	{
+		Movement_ShowJumpTrajectory->SetParameterName(INVTEXT("Show Jump Trajectory"));
+	}
+
 	if (Common_AutoRestartLevel)
 	{
 		Common_AutoRestartLevel->SetParameterName(INVTEXT("Auto Restart Level"));
@@ -156,6 +161,9 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperSettingsSnapshotIntoWidget
 	const bool bNeedsRuntimeCharacterFallback =
 		!DeveloperSettingsSnapshot.bHasSavedCombatSettings
 		|| !DeveloperSettingsSnapshot.bHasSavedChargeShotSettings
+		|| !DeveloperSettingsSnapshot.bHasSavedJumpHorizontalSpeed
+		|| !DeveloperSettingsSnapshot.bHasSavedCrouchCapsuleScale
+		|| !DeveloperSettingsSnapshot.bHasSavedJumpTrajectoryPreview
 		|| !DeveloperSettingsSnapshot.bHasSavedTraversalSettings;
 
 	if (bNeedsRuntimeCharacterFallback)
@@ -170,6 +178,24 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperSettingsSnapshotIntoWidget
 		if (!DeveloperSettingsSnapshot.bHasSavedChargeShotSettings)
 		{
 			ResolvedCharacterSettings.DeveloperChargeShotSettings = RuntimeCharacterSettings.DeveloperChargeShotSettings;
+		}
+
+		if (!DeveloperSettingsSnapshot.bHasSavedJumpHorizontalSpeed)
+		{
+			ResolvedCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed =
+				RuntimeCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed;
+		}
+
+		if (!DeveloperSettingsSnapshot.bHasSavedCrouchCapsuleScale)
+		{
+			ResolvedCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale =
+				RuntimeCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale;
+		}
+
+		if (!DeveloperSettingsSnapshot.bHasSavedJumpTrajectoryPreview)
+		{
+			ResolvedCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory =
+				RuntimeCharacterSettings.DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory;
 		}
 
 		if (!DeveloperSettingsSnapshot.bHasSavedTraversalSettings)
@@ -344,6 +370,24 @@ void UPlatformerDeveloperSettingsWidget::LoadDeveloperMovementSettingsIntoWidget
 	{
 		Movement_JumpApexGravityMultiplier->SetParameterValue(
 			DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier);
+	}
+
+	if (Movement_JumpHorizontalSpeed)
+	{
+		Movement_JumpHorizontalSpeed->SetParameterValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed);
+	}
+
+	if (Movement_CrouchCapsuleScale)
+	{
+		Movement_CrouchCapsuleScale->SetParameterValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale);
+	}
+
+	if (Movement_ShowJumpTrajectory)
+	{
+		Movement_ShowJumpTrajectory->SetCheckboxValue(
+			DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory);
 	}
 
 	if (Movement_GravityScale)
@@ -622,6 +666,21 @@ void UPlatformerDeveloperSettingsWidget::PatchWorkingCopyFromWidgets()
 		WorkingCopy.bHasSavedChargeShotSettings = true;
 	}
 
+	if (Movement_JumpHorizontalSpeed)
+	{
+		WorkingCopy.bHasSavedJumpHorizontalSpeed = true;
+	}
+
+	if (Movement_CrouchCapsuleScale)
+	{
+		WorkingCopy.bHasSavedCrouchCapsuleScale = true;
+	}
+
+	if (Movement_ShowJumpTrajectory)
+	{
+		WorkingCopy.bHasSavedJumpTrajectoryPreview = true;
+	}
+
 	if (HasDeveloperTraversalWidgetBindings())
 	{
 		WorkingCopy.bHasSavedTraversalSettings = true;
@@ -805,6 +864,24 @@ FDeveloperPlatformerCharacterMovementSettings UPlatformerDeveloperSettingsWidget
 	{
 		DeveloperCharacterMovementSettings.DeveloperMovementJumpApexGravityMultiplier =
 			Movement_JumpApexGravityMultiplier->GetEditableParameterValue();
+	}
+
+	if (Movement_JumpHorizontalSpeed)
+	{
+		DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed =
+			Movement_JumpHorizontalSpeed->GetEditableParameterValue();
+	}
+
+	if (Movement_CrouchCapsuleScale)
+	{
+		DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale =
+			Movement_CrouchCapsuleScale->GetEditableParameterValue();
+	}
+
+	if (Movement_ShowJumpTrajectory)
+	{
+		DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory =
+			Movement_ShowJumpTrajectory->GetCheckboxValue();
 	}
 
 	if (Movement_GravityScale)

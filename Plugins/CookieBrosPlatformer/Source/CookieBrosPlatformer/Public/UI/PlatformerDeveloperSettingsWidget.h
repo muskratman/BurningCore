@@ -127,6 +127,15 @@ protected:
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UDeveloperParameterWidget> Movement_JumpApexGravityMultiplier;
 
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UDeveloperParameterWidget> Movement_JumpHorizontalSpeed;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UDeveloperParameterWidget> Movement_CrouchCapsuleScale;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	TObjectPtr<UDeveloperCheckboxWidget> Movement_ShowJumpTrajectory;
+
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UDeveloperParameterWidget> Movement_GravityScale;
 

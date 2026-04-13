@@ -437,6 +437,7 @@ void UPlatformerYokuBlocksSettingsObject::PullFromActor(AActor* Actor)
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("InitialDelay"), InitialDelay);
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("ShowDuration"), ShowDuration);
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("HidenDuration"), HidenDuration);
+	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("HideSpeed"), HideSpeed);
 }
 
 void UPlatformerYokuBlocksSettingsObject::PushToActor()
@@ -445,4 +446,5 @@ void UPlatformerYokuBlocksSettingsObject::PushToActor()
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("InitialDelay"), FMath::Max(0.0f, InitialDelay));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("ShowDuration"), FMath::Max(0.0f, ShowDuration));
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("HidenDuration"), FMath::Max(0.0f, HidenDuration));
+	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("HideSpeed"), FMath::Max(0.0f, HideSpeed));
 }

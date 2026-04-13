@@ -7,8 +7,10 @@
 #include "PlatformerCharacterBase.generated.h"
 
 class UPlatformerAbilitySet;
+class UGA_PlatformerJump;
 class USpringArmComponent;
 class UCameraComponent;
+class ADeveloperJumpTrajectory;
 class APlatformerLadder;
 class APlatformerLedgeGrab;
 class UDamageType;
@@ -31,6 +33,9 @@ class COOKIEBROSPLATFORMER_API APlatformerCharacterBase : public APlatformerComb
 	UPROPERTY(EditDefaultsOnly, Category="Abilities")
 	TObjectPtr<UPlatformerAbilitySet> DefaultAbilitySet;
 
+	UPROPERTY(EditDefaultsOnly, Category="Developer|Jump Preview")
+	TSubclassOf<ADeveloperJumpTrajectory> DeveloperJumpTrajectoryClass;
+
 public:
 	APlatformerCharacterBase(const FObjectInitializer& ObjectInitializer);
 
@@ -47,18 +52,25 @@ public:
 	virtual FDeveloperPlatformerCharacterSettings CaptureDeveloperCharacterSettings() const;
 	virtual FPlatformerDeveloperSettingsSnapshot CaptureDeveloperSettingsSnapshot() const;
 	virtual FVector GetPlatformerCameraFocusLocation() const;
+	UFUNCTION(BlueprintCallable, Category="Developer|Jump Preview")
+	ADeveloperJumpTrajectory* SpawnJumpTrajectorySnapshotActor();
 
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE bool IsOnLadder() const { return bIsOnLadder; }
 	FORCEINLINE APlatformerLadder* GetActiveLadder() const { return ActiveLadder; }
 	FORCEINLINE APlatformerLadder* GetAvailableLadder() const { return AvailableLadder; }
+	FORCEINLINE bool HasDeveloperCrouchCapsuleScaleOverride() const { return bHasDeveloperCrouchCapsuleScaleOverride; }
+	FORCEINLINE bool HasDeveloperJumpHorizontalSpeedOverride() const { return bHasDeveloperJumpHorizontalSpeedOverride; }
+	float ResolveDeveloperCrouchCapsuleScale(float DefaultCrouchCapsuleScale) const;
+	float ResolveDeveloperJumpHorizontalSpeed(float DefaultJumpHorizontalSpeed) const;
 	bool HasActiveDeveloperCombatSettings() const;
 	const FDeveloperPlatformerCombatSettings& GetActiveDeveloperCombatSettings() const;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void FellOutOfWorld(const UDamageType& DamageType) override;
 	virtual void OnCombatDeath(AActor* DamageInstigatorActor) override;
@@ -72,6 +84,20 @@ protected:
 	virtual void ApplyDeveloperCombatSettings(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings);
 	virtual FDeveloperPlatformerCombatSettings CaptureDeveloperCombatSettings() const;
 	virtual float GetHealthWidgetVerticalPadding() const override;
+	void SetShowJumpTrajectoryPreview(bool bInShowJumpTrajectoryPreview);
+	ADeveloperJumpTrajectory* EnsureDeveloperJumpTrajectoryActor();
+	void DestroyDeveloperJumpTrajectoryActor();
+	void SetDeveloperCrouchCapsuleScaleOverride(float InCrouchCapsuleScale);
+	void ClearDeveloperCrouchCapsuleScaleOverride();
+	void SetDeveloperJumpHorizontalSpeedOverride(float InJumpHorizontalSpeed);
+	void ClearDeveloperJumpHorizontalSpeedOverride();
+	float CaptureDeveloperCrouchCapsuleScale() const;
+	float CaptureDeveloperJumpHorizontalSpeed() const;
+	float ResolveDefaultCrouchCapsuleScale() const;
+	float ResolveStandingCapsuleHalfHeight() const;
+	void ApplyResolvedCrouchCapsuleScale();
+	const UGA_PlatformerJump* FindGrantedJumpAbility() const;
+	void RefreshJumpTrajectoryPreview();
 	FDeveloperPlatformerCombatSettings ResolveDeveloperCombatSettingsForApplication(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings) const;
 	void LoadAndApplyDeveloperSettings();
 	void SetHasActiveDeveloperCombatSettings(bool bInHasActiveDeveloperCombatSettings);
@@ -105,6 +131,24 @@ protected:
 
 	UPROPERTY(Transient)
 	FDeveloperPlatformerCombatSettings ActiveDeveloperCombatSettings;
+
+	UPROPERTY(Transient)
+	bool bHasDeveloperCrouchCapsuleScaleOverride = false;
+
+	UPROPERTY(Transient)
+	float DeveloperCrouchCapsuleScaleOverride = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bHasDeveloperJumpHorizontalSpeedOverride = false;
+
+	UPROPERTY(Transient)
+	float DeveloperJumpHorizontalSpeedOverride = 0.0f;
+
+	UPROPERTY(Transient)
+	bool bShowJumpTrajectoryPreview = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ADeveloperJumpTrajectory> DeveloperJumpTrajectoryActor;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI", meta=(ClampMin=0.0, Units="cm"))
 	float PlatformerHealthWidgetVerticalPadding = 20.0f;

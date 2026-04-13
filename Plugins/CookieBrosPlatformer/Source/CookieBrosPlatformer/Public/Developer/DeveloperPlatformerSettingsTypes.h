@@ -61,6 +61,15 @@ struct COOKIEBROSPLATFORMER_API FDeveloperPlatformerCharacterMovementSettings
 	float DeveloperMovementJumpApexGravityMultiplier = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	float DeveloperMovementJumpHorizontalSpeed = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	float DeveloperMovementCrouchCapsuleScale = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool DeveloperMovementShowJumpTrajectory = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	float DeveloperMovementGravityScale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
@@ -201,6 +210,15 @@ struct COOKIEBROSPLATFORMER_API FPlatformerDeveloperSettingsSnapshot
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	bool bHasSavedChargeShotSettings = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedJumpHorizontalSpeed = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedCrouchCapsuleScale = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
+	bool bHasSavedJumpTrajectoryPreview = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Developer")
 	bool bHasSavedTraversalSettings = false;

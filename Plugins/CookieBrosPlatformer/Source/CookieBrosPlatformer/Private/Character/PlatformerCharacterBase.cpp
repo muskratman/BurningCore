@@ -8,7 +8,10 @@
 #include "Components/WidgetComponent.h"
 #include "Core/PlatformerDeveloperSettingsSubsystem.h"
 #include "Core/PlatformerPlayerControllerBase.h"
+#include "Developer/DeveloperJumpTrajectory.h"
 #include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "GAS/Abilities/GA_PlatformerJump.h"
 #include "GAS/PlatformerGameplayTags.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 #include "GAS/PlatformerAbilitySet.h"
@@ -43,6 +46,8 @@ APlatformerCharacterBase::APlatformerCharacterBase(const FObjectInitializer& Obj
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	DeveloperJumpTrajectoryClass = ADeveloperJumpTrajectory::StaticClass();
 
 	if (AttributeSet)
 	{
@@ -97,8 +102,26 @@ void APlatformerCharacterBase::ApplyDeveloperCharacterSettings(const FDeveloperP
 
 void APlatformerCharacterBase::ApplyDeveloperSettingsSnapshot(const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot)
 {
+	const bool bPreviousShowJumpTrajectoryPreview = bShowJumpTrajectoryPreview;
+
 	ApplyDeveloperCameraSettings(DeveloperSettingsSnapshot.CharacterSettings.DeveloperCameraSettings);
 	ApplyDeveloperCharacterMovementSettings(DeveloperSettingsSnapshot.CharacterSettings.DeveloperCharacterMovementSettings);
+
+	if (!DeveloperSettingsSnapshot.bHasSavedJumpHorizontalSpeed)
+	{
+		ClearDeveloperJumpHorizontalSpeedOverride();
+	}
+
+	if (!DeveloperSettingsSnapshot.bHasSavedCrouchCapsuleScale)
+	{
+		ClearDeveloperCrouchCapsuleScaleOverride();
+	}
+
+	if (!DeveloperSettingsSnapshot.bHasSavedJumpTrajectoryPreview)
+	{
+		SetShowJumpTrajectoryPreview(bPreviousShowJumpTrajectoryPreview);
+		RefreshJumpTrajectoryPreview();
+	}
 
 	if (DeveloperSettingsSnapshot.bHasSavedCombatSettings)
 	{
@@ -126,12 +149,29 @@ FPlatformerDeveloperSettingsSnapshot APlatformerCharacterBase::CaptureDeveloperS
 	FPlatformerDeveloperSettingsSnapshot DeveloperSettingsSnapshot;
 	DeveloperSettingsSnapshot.CharacterSettings = CaptureDeveloperCharacterSettings();
 	DeveloperSettingsSnapshot.bHasSavedCombatSettings = HasActiveDeveloperCombatSettings();
+	DeveloperSettingsSnapshot.bHasSavedJumpHorizontalSpeed = bHasDeveloperJumpHorizontalSpeedOverride;
+	DeveloperSettingsSnapshot.bHasSavedCrouchCapsuleScale = bHasDeveloperCrouchCapsuleScaleOverride;
+	DeveloperSettingsSnapshot.bHasSavedJumpTrajectoryPreview = true;
 	return DeveloperSettingsSnapshot;
 }
 
 FVector APlatformerCharacterBase::GetPlatformerCameraFocusLocation() const
 {
 	return GetActorLocation();
+}
+
+float APlatformerCharacterBase::ResolveDeveloperCrouchCapsuleScale(float DefaultCrouchCapsuleScale) const
+{
+	return bHasDeveloperCrouchCapsuleScaleOverride
+		? DeveloperCrouchCapsuleScaleOverride
+		: FMath::Max(DefaultCrouchCapsuleScale, 0.0f);
+}
+
+float APlatformerCharacterBase::ResolveDeveloperJumpHorizontalSpeed(float DefaultJumpHorizontalSpeed) const
+{
+	return bHasDeveloperJumpHorizontalSpeedOverride
+		? DeveloperJumpHorizontalSpeedOverride
+		: FMath::Max(DefaultJumpHorizontalSpeed, 0.0f);
 }
 
 void APlatformerCharacterBase::NotifyLadderAvailable(APlatformerLadder* Ladder)
@@ -330,6 +370,8 @@ void APlatformerCharacterBase::BeginPlay()
 	}
 
 	LoadAndApplyDeveloperSettings();
+	EnsureDeveloperJumpTrajectoryActor();
+	RefreshJumpTrajectoryPreview();
 }
 
 void APlatformerCharacterBase::Tick(float DeltaTime)
@@ -358,6 +400,12 @@ void APlatformerCharacterBase::Tick(float DeltaTime)
 		{
 			return !AvailableLedgeGrab.IsValid();
 		});
+}
+
+void APlatformerCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	DestroyDeveloperJumpTrajectoryActor();
+	Super::EndPlay(EndPlayReason);
 }
 
 void APlatformerCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -516,6 +564,11 @@ void APlatformerCharacterBase::ApplyDeveloperCharacterMovementSettings(const FDe
 			MovementComponent->GravityScale = FMath::Max(0.0f, DeveloperCharacterMovementSettings.DeveloperMovementGravityScale);
 		}
 	}
+
+	SetDeveloperCrouchCapsuleScaleOverride(DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale);
+	SetDeveloperJumpHorizontalSpeedOverride(DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed);
+	SetShowJumpTrajectoryPreview(DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory);
+	RefreshJumpTrajectoryPreview();
 }
 
 FDeveloperPlatformerCharacterMovementSettings APlatformerCharacterBase::CaptureDeveloperCharacterMovementSettings() const
@@ -545,7 +598,225 @@ FDeveloperPlatformerCharacterMovementSettings APlatformerCharacterBase::CaptureD
 		}
 	}
 
+	DeveloperCharacterMovementSettings.DeveloperMovementCrouchCapsuleScale = CaptureDeveloperCrouchCapsuleScale();
+	DeveloperCharacterMovementSettings.DeveloperMovementJumpHorizontalSpeed = CaptureDeveloperJumpHorizontalSpeed();
+	DeveloperCharacterMovementSettings.DeveloperMovementShowJumpTrajectory = bShowJumpTrajectoryPreview;
+
 	return DeveloperCharacterMovementSettings;
+}
+
+void APlatformerCharacterBase::SetDeveloperCrouchCapsuleScaleOverride(float InCrouchCapsuleScale)
+{
+	bHasDeveloperCrouchCapsuleScaleOverride = true;
+	DeveloperCrouchCapsuleScaleOverride = FMath::Max(InCrouchCapsuleScale, 0.0f);
+	ApplyResolvedCrouchCapsuleScale();
+}
+
+void APlatformerCharacterBase::ClearDeveloperCrouchCapsuleScaleOverride()
+{
+	bHasDeveloperCrouchCapsuleScaleOverride = false;
+	DeveloperCrouchCapsuleScaleOverride = 0.0f;
+	ApplyResolvedCrouchCapsuleScale();
+}
+
+void APlatformerCharacterBase::SetDeveloperJumpHorizontalSpeedOverride(float InJumpHorizontalSpeed)
+{
+	bHasDeveloperJumpHorizontalSpeedOverride = true;
+	DeveloperJumpHorizontalSpeedOverride = FMath::Max(InJumpHorizontalSpeed, 0.0f);
+}
+
+void APlatformerCharacterBase::ClearDeveloperJumpHorizontalSpeedOverride()
+{
+	bHasDeveloperJumpHorizontalSpeedOverride = false;
+	DeveloperJumpHorizontalSpeedOverride = 0.0f;
+}
+
+float APlatformerCharacterBase::CaptureDeveloperCrouchCapsuleScale() const
+{
+	if (bHasDeveloperCrouchCapsuleScaleOverride)
+	{
+		return DeveloperCrouchCapsuleScaleOverride;
+	}
+
+	return ResolveDefaultCrouchCapsuleScale();
+}
+
+void APlatformerCharacterBase::SetShowJumpTrajectoryPreview(bool bInShowJumpTrajectoryPreview)
+{
+	bShowJumpTrajectoryPreview = bInShowJumpTrajectoryPreview;
+
+	if (ADeveloperJumpTrajectory* JumpTrajectoryActor = EnsureDeveloperJumpTrajectoryActor())
+	{
+		JumpTrajectoryActor->SetShowJumpTrajectoryPreview(bShowJumpTrajectoryPreview);
+	}
+}
+
+float APlatformerCharacterBase::ResolveDefaultCrouchCapsuleScale() const
+{
+	const ACharacter* DefaultCharacter = GetClass()->GetDefaultObject<ACharacter>();
+	const UCharacterMovementComponent* DefaultMovementComponent = DefaultCharacter
+		? DefaultCharacter->GetCharacterMovement()
+		: GetCharacterMovement();
+	const float StandingCapsuleHalfHeight = ResolveStandingCapsuleHalfHeight();
+	if (!DefaultMovementComponent || StandingCapsuleHalfHeight <= UE_KINDA_SMALL_NUMBER)
+	{
+		return 1.0f;
+	}
+
+	return FMath::Max(DefaultMovementComponent->GetCrouchedHalfHeight() / StandingCapsuleHalfHeight, 0.0f);
+}
+
+float APlatformerCharacterBase::ResolveStandingCapsuleHalfHeight() const
+{
+	const ACharacter* DefaultCharacter = GetClass()->GetDefaultObject<ACharacter>();
+	const UCapsuleComponent* DefaultCapsuleComponent = DefaultCharacter
+		? DefaultCharacter->GetCapsuleComponent()
+		: GetCapsuleComponent();
+	return DefaultCapsuleComponent
+		? FMath::Max(DefaultCapsuleComponent->GetUnscaledCapsuleHalfHeight(), 0.0f)
+		: 0.0f;
+}
+
+void APlatformerCharacterBase::ApplyResolvedCrouchCapsuleScale()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	UCapsuleComponent* CapsuleComponent = GetCapsuleComponent();
+	if (!MovementComponent || !CapsuleComponent)
+	{
+		return;
+	}
+
+	const float StandingCapsuleHalfHeight = ResolveStandingCapsuleHalfHeight();
+	if (StandingCapsuleHalfHeight <= UE_KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const float ResolvedCrouchCapsuleScale = ResolveDeveloperCrouchCapsuleScale(ResolveDefaultCrouchCapsuleScale());
+	const float ResolvedCrouchedHalfHeight = FMath::Max(
+		CapsuleComponent->GetUnscaledCapsuleRadius(),
+		StandingCapsuleHalfHeight * ResolvedCrouchCapsuleScale);
+	MovementComponent->SetCrouchedHalfHeight(ResolvedCrouchedHalfHeight);
+
+	if (bIsCrouched)
+	{
+		MovementComponent->Crouch(false);
+	}
+}
+
+float APlatformerCharacterBase::CaptureDeveloperJumpHorizontalSpeed() const
+{
+	if (bHasDeveloperJumpHorizontalSpeedOverride)
+	{
+		return DeveloperJumpHorizontalSpeedOverride;
+	}
+
+	if (const UGA_PlatformerJump* JumpAbility = FindGrantedJumpAbility())
+	{
+		return JumpAbility->GetJumpHorizontalSpeed();
+	}
+
+	return 0.0f;
+}
+
+const UGA_PlatformerJump* APlatformerCharacterBase::FindGrantedJumpAbility() const
+{
+	if (!AbilitySystemComponent)
+	{
+		return nullptr;
+	}
+
+	const TArray<FGameplayAbilitySpec>& ActivatableAbilities = AbilitySystemComponent->GetActivatableAbilities();
+	for (const FGameplayAbilitySpec& AbilitySpec : ActivatableAbilities)
+	{
+		if (const UGA_PlatformerJump* JumpAbility = Cast<UGA_PlatformerJump>(AbilitySpec.Ability))
+		{
+			return JumpAbility;
+		}
+	}
+
+	return nullptr;
+}
+
+void APlatformerCharacterBase::RefreshJumpTrajectoryPreview()
+{
+	if (ADeveloperJumpTrajectory* JumpTrajectoryActor = EnsureDeveloperJumpTrajectoryActor())
+	{
+		JumpTrajectoryActor->SetShowJumpTrajectoryPreview(bShowJumpTrajectoryPreview);
+		JumpTrajectoryActor->RefreshTrajectoryPreview();
+	}
+}
+
+ADeveloperJumpTrajectory* APlatformerCharacterBase::SpawnJumpTrajectorySnapshotActor()
+{
+	ADeveloperJumpTrajectory* JumpTrajectoryActor = EnsureDeveloperJumpTrajectoryActor();
+	if (!JumpTrajectoryActor)
+	{
+		return nullptr;
+	}
+
+	JumpTrajectoryActor->SetShowJumpTrajectoryPreview(bShowJumpTrajectoryPreview);
+	JumpTrajectoryActor->RefreshTrajectoryPreview();
+	return JumpTrajectoryActor->SpawnSnapshotCopy();
+}
+
+ADeveloperJumpTrajectory* APlatformerCharacterBase::EnsureDeveloperJumpTrajectoryActor()
+{
+	if (IsValid(DeveloperJumpTrajectoryActor))
+	{
+		return DeveloperJumpTrajectoryActor;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld())
+	{
+		return nullptr;
+	}
+
+	if (!GetCapsuleComponent())
+	{
+		return nullptr;
+	}
+
+	UClass* JumpTrajectoryClass = DeveloperJumpTrajectoryClass.Get();
+	if (!JumpTrajectoryClass)
+	{
+		JumpTrajectoryClass = ADeveloperJumpTrajectory::StaticClass();
+	}
+
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Owner = this;
+	SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	DeveloperJumpTrajectoryActor = World->SpawnActor<ADeveloperJumpTrajectory>(
+		JumpTrajectoryClass,
+		GetCapsuleComponent()->GetComponentTransform(),
+		SpawnParameters);
+	if (!DeveloperJumpTrajectoryActor)
+	{
+		return nullptr;
+	}
+
+	DeveloperJumpTrajectoryActor->AttachToComponent(
+		GetCapsuleComponent(),
+		FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	DeveloperJumpTrajectoryActor->SetActorRelativeLocation(FVector::ZeroVector);
+	DeveloperJumpTrajectoryActor->SetActorRelativeRotation(FRotator::ZeroRotator);
+	DeveloperJumpTrajectoryActor->InitializeAttachedPreview(this);
+	DeveloperJumpTrajectoryActor->SetShowJumpTrajectoryPreview(bShowJumpTrajectoryPreview);
+
+	return DeveloperJumpTrajectoryActor;
+}
+
+void APlatformerCharacterBase::DestroyDeveloperJumpTrajectoryActor()
+{
+	if (!IsValid(DeveloperJumpTrajectoryActor))
+	{
+		return;
+	}
+
+	DeveloperJumpTrajectoryActor->Destroy();
+	DeveloperJumpTrajectoryActor = nullptr;
 }
 
 void APlatformerCharacterBase::ApplyDeveloperCombatSettings(const FDeveloperPlatformerCombatSettings& DeveloperCombatSettings)

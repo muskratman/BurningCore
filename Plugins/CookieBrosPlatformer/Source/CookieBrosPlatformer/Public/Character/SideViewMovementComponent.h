@@ -18,6 +18,8 @@ public:
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void InitializeComponent() override;
+	virtual void CalcVelocity(float DeltaTime, float Friction, bool bFluid, float BrakingDeceleration) override;
+	virtual void OnMovementModeChanged(EMovementMode PreviousMovementMode, uint8 PreviousCustomMode) override;
 
 	/** The Y-coordinate to lock the character to */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SideView", meta=(Units="cm"))
@@ -57,10 +59,16 @@ public:
 	UFUNCTION(BlueprintPure, Category="SideView|Gravity")
 	float GetBaseGravityScale() const { return DefaultGravityScale; }
 
+	void NotifyJumpHorizontalSpeedApplied(float HorizontalSpeed, float DirectionSign);
+
 protected:
 	virtual void PhysCustom(float DeltaTime, int32 Iterations) override;
 
 	void EnforceDepthLock(float DeltaTime);
+	bool ShouldSuppressFallingJumpBraking() const;
+	bool IsJumpHorizontalSpeedInputHeld() const;
+	void ClearJumpHorizontalSpeedProtection();
+	void UpdateJumpHorizontalSpeedProtection();
 
 	float TargetDepthY;
 	float DepthTransitionSpeed;
@@ -69,4 +77,6 @@ protected:
 	float DefaultGravityScale;
 	bool bHasExternalGravityScaleOverride;
 	float ExternalGravityScaleOverride;
+	bool bHasJumpHorizontalSpeedProtection = false;
+	float ProtectedJumpDirectionSign = 0.0f;
 };

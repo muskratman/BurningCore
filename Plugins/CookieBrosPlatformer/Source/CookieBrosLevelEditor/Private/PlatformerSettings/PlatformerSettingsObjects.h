@@ -308,4 +308,7 @@ public:
 
 	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Hiden Duration"))
 	float HidenDuration = 1.5f;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="cm/s", DisplayName="Hide Speed"))
+	float HideSpeed = 300.0f;
 };
