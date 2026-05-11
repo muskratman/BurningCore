@@ -1,6 +1,8 @@
 #include "GAS/Abilities/GA_PlatformerDash.h"
 
+#include "Character/PlatformerCharacterBase.h"
 #include "GameFramework/Character.h"
+#include "GAS/PlatformerGameplayTags.h"
 #include "Traversal/PlatformerTraversalGameplayTags.h"
 #include "Traversal/PlatformerTraversalMovementComponent.h"
 
@@ -12,6 +14,7 @@ UGA_PlatformerDash::UGA_PlatformerDash()
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeHang);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeClimb);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Combat_Charging);
+	ActivationBlockedTags.AddTag(PlatformerGameplayTags::State_Movement_Ladder);
 }
 
 bool UGA_PlatformerDash::CanActivateAbility(
@@ -27,6 +30,12 @@ bool UGA_PlatformerDash::CanActivateAbility(
 	}
 
 	const ACharacter* Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
+	const APlatformerCharacterBase* PlatformerCharacter = Cast<APlatformerCharacterBase>(Character);
+	if (PlatformerCharacter && (PlatformerCharacter->IsOnLadder() || PlatformerCharacter->IsLadderTopFinishActive()))
+	{
+		return false;
+	}
+
 	const UPlatformerTraversalMovementComponent* TraversalMovementComponent =
 		Character ? Cast<UPlatformerTraversalMovementComponent>(Character->GetCharacterMovement()) : nullptr;
 	return TraversalMovementComponent && Character->GetCharacterMovement()->IsMovingOnGround();

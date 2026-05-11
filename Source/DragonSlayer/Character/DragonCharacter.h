@@ -39,6 +39,9 @@ public:
   }
 
 protected:
+  virtual void OnCombatDamageReceived(float DamageAmount, const FHitResult &HitResult,
+                                      AActor *DamageInstigatorActor) override;
+
   UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat|Projectile",
             meta = (ClampMin = 0.0, Units = "cm"))
   float ProjectileMaxDistance = 1500.0f;

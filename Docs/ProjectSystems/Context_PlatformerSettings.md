@@ -89,35 +89,62 @@ Environment actors:
 - `APlatformerVanishingBlock`
 - `APlatformerWallTurret`
 - `APlatformerYokuBlocks`
+- `APlatformerCameraVolume`
 
 Enemy actors:
 
 - `APlatformerEnemyBase`
+- `APlatformerEnemyElite`
 - `APlatformerEnemyRanged`
 
-The creation order matters. More specific subclasses must be checked before their base classes. For example, `APlatformerEnemyRanged` is resolved before `APlatformerEnemyBase`, and `APlatformerTriggeredLift` is resolved before `APlatformerMovingPlatform`.
+The creation order matters. More specific subclasses must be checked before their base classes. For example, `APlatformerEnemyElite` and `APlatformerEnemyRanged` are resolved before `APlatformerEnemyBase`, and `APlatformerTriggeredLift` is resolved before `APlatformerMovingPlatform`.
 
 ## Enemy Quick Settings
 
 `UPlatformerEnemySettingsObject` edits reusable enemy actor settings:
 
-- `Health` default `100`
-- `MovementSpeed` default `300 cm/s`
-- `Damage` default `10`
-- `HitDelay` default `1s`
-- `PatrolDelayTime` endpoint delay, default `0s`
-- `EnablePlayerChase` default `false`
-- `ChaseAgroRadius` default `300 cm`
-- `PatrolPoints` as relative offsets from the enemy's start location
+- `CommonEnemySettings / Health` default `100`
+- `CommonEnemySettings / MovementSpeed` default `300 cm/s`
+- `CommonEnemySettings / Damage` default `10`
+- `CommonEnemySettings / HitDelay` default `1s`
+- `CommonEnemySettings / MovementDelayOnHit` default `0s`
+- `CommonEnemySettings / OnHitTakenImpulse` default `0 cm/s`
+- `CommonEnemySettings / EnablePlayerChase` default `false`
+- `CommonEnemySettings / ChaseAgroRadius` default `300 cm`
+- `Path Component / PathPoints` per-point `PointLocation`, `PointDelay`, and `SpeedScale`
+- `Path Component / bRepeatPath`, enabled by default for native enemy patrol
+- patrol path points as relative offsets from the enemy's start location
 
 `UPlatformerRangedEnemySettingsObject` adds:
 
 - `ProjectileSpeed` default `500 cm/s`
 - `ProjectileDistance` default `600 cm`
 
-The runtime source of truth is `APlatformerEnemyBase` and `APlatformerEnemyRanged`. `PushToActor()` uses their public setters so editor edits also refresh the enemy's runtime attributes, movement component speed, projectile data, and patrol data.
+`UPlatformerEliteEnemySettingsObject` adds:
+
+- `CombatProfile` using reusable `EPlatformerEnemyCombatProfile`: `Melee`, `Ranged`, or `Hybrid`
+- `ProjectileSpeed` default `500 cm/s`
+- `ProjectileDistance` default `600 cm`
+
+The runtime source of truth is `APlatformerEnemyBase`, `APlatformerEnemyRanged`, and `APlatformerEnemyElite`. `PushToActor()` uses their public setters so editor edits also refresh the enemy's runtime attributes, movement component speed, hit movement reaction, projectile data, combat profile, and patrol data.
 
 `APlatformerEnemyBase` still supports `UPlatformerEnemyArchetypeAsset`. Archetype data is treated as a template: it fills enemy values that are still at class defaults, while instance-edited quick settings can stay local to a placed actor.
+
+## Camera Volume Quick Settings
+
+`UPlatformerCameraVolumeSettingsObject` edits `APlatformerCameraVolume`.
+
+It exposes:
+
+- `VolumeSizeNew`
+- `LocationNew`
+- `VolumeSizeDefault`
+- `LocationDefault`
+- `BlendTime`
+- `EaseExponent`
+- `TargetCameraSettings`
+
+`TargetCameraSettings` is `FPlatformerCameraVolumeSettings`, a level-facing wrapper around the runtime camera rig and camera manager data. Its field names are designer-facing (`CameraLocation`, `SpringArmLength`, `HorizontalOffset`, etc.) and intentionally do not expose the `DeveloperCameraManager*` prefixes or camera projection mode used internally by the DeveloperSettings save payload. The quick settings panel edits the placed actor only; it does not write runtime developer setting slots.
 
 ## Enemy Runtime Details
 
@@ -134,6 +161,7 @@ Enemy settings are applied to:
 - `MoveSpeed`
 - `UCharacterMovementComponent::MaxWalkSpeed`
 - `MaxFlySpeed`
+- hit movement reaction: `MovementDelayOnHit` and `OnHitTakenImpulse`
 
 `HitDelay` is designer-facing seconds between hits. `AttackSpeed` remains an attribute and is derived as:
 
@@ -141,13 +169,15 @@ Enemy settings are applied to:
 AttackSpeed = HitDelay > 0 ? 1 / HitDelay : 0
 ```
 
-`PatrolPoints` are stored as relative offsets from the enemy's start location. Runtime patrol resolves each point as `PatrolOriginLocation + PatrolPoints[Index]`, where `PatrolOriginLocation` is captured from the actor location on `BeginPlay`. Native patrol movement only runs when patrol is enabled, the array is not empty, the enemy is alive, and the enemy has no active combat target.
+`MovementDelayOnHit` is designer-facing seconds of AI movement input suppression after a non-fatal hit. `0` disables the delay. `OnHitTakenImpulse` is a horizontal side-view knockback impulse applied through `LaunchCharacter()` when the enemy takes a non-fatal hit. `0` disables knockback. These settings do not live in the widget; PlatformerSettings only forwards them to `APlatformerEnemyBase`.
 
-Patrol follows a ping-pong route through the array, not a closed loop. For example, `A -> B -> C -> B -> A`. `PatrolDelayTime` is applied only at endpoint indices `0` and `Num - 1`.
+Enemy patrol points live in the reusable `UPlatformerPathComponent` attached to `APlatformerEnemyBase`. Points are stored as relative offsets from the enemy's start location in `FPlatformerPathPoint::PointLocation`. Runtime patrol resolves each point as `PatrolOriginLocation + PathPoints[Index].PointLocation`, where `PatrolOriginLocation` is captured from the actor location on `BeginPlay`. Native patrol movement only runs when patrol is enabled, the path has at least two points, the enemy is alive, and the enemy has no active combat target.
+
+`PointDelay` is applied at the reached point before moving to the next point. `SpeedScale` scales movement for the segment that starts at that point. `bRepeatPath` controls whether patrol loops from the last point back to the first point; when disabled, patrol performs a single pass and stops at the final point.
 
 Walking enemies patrol along X only. Flying enemies can patrol along X/Z. The Y axis is ignored to keep enemies locked to the side-view gameplay plane.
 
-Enemy patrol preview uses editor-only visualization on the actor: a spline through the relative patrol points plus sphere markers for each point.
+Path data uses `UPlatformerPathComponent`. Enemy patrol, moving platform/triggered lift/closing door routes, and camera volume New/Default positions all reuse this component instead of owning separate preview state. Viewport preview is drawn by the component's editor debug render proxy: red lines connect path points, point markers show each location, and 3D labels show point indices without adding spline mesh, sphere, or text child components to the actor tree. The component visualizer provides selectable point handles for editor dragging, matching the old enemy patrol point workflow. The debug proxy is not created for game worlds, so path visualization is hidden during play. PlatformerSettings exposes a dedicated `Path Component` block with `bRepeatPath` and `PathPoints`; settings edits update the component preview, and component visualizer edits refresh the active settings object.
 
 Enemy capsules ignore movement collision with other `APlatformerEnemyBase` actors, so enemies can cross each other even on the same Y plane. This does not change player-vs-enemy collision responses.
 

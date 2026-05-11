@@ -4,6 +4,7 @@
 #include "GAS/Abilities/GA_PlatformerDash.h"
 #include "GAS/Abilities/GA_DragonBaseShot.h"
 #include "GAS/Abilities/GA_DragonChargeShot.h"
+#include "GAS/Abilities/GA_HitReaction.h"
 #include "Character/SideViewMovementComponent.h"
 #include "Traversal/PlatformerTraversalComponent.h"
 #include "Traversal/PlatformerTraversalMovementComponent.h"
@@ -122,6 +123,17 @@ TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveChargeShotAbility
 	return ResolvedChargeShotAbilityClass;
 }
 
+TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveHitReactionAbilityClass() const
+{
+	TSubclassOf<UGameplayAbility> ResolvedHitReactionAbilityClass = HitReactionAbilityClass;
+	if (!ResolvedHitReactionAbilityClass)
+	{
+		ResolvedHitReactionAbilityClass = UGA_HitReaction::StaticClass();
+	}
+
+	return ResolvedHitReactionAbilityClass;
+}
+
 void APlayableDragonCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -176,12 +188,14 @@ void APlayableDragonCharacter::PossessedBy(AController* NewController)
 			const TSubclassOf<UGameplayAbility> ResolvedDashAbilityClass = ResolveDashAbilityClass();
 			const TSubclassOf<UGameplayAbility> ResolvedBaseShotAbilityClass = ResolveBaseShotAbilityClass();
 			const TSubclassOf<UGameplayAbility> ResolvedChargeShotAbilityClass = ResolveChargeShotAbilityClass();
+			const TSubclassOf<UGameplayAbility> ResolvedHitReactionAbilityClass = ResolveHitReactionAbilityClass();
 
 			if (ResolvedDashAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedDashAbilityClass, 1, INDEX_NONE, this));
 			if (JumpAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(JumpAbilityClass, 1, INDEX_NONE, this));
 			if (CrouchAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(CrouchAbilityClass, 1, INDEX_NONE, this));
 			if (ResolvedBaseShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedBaseShotAbilityClass, 1, INDEX_NONE, this));
 			if (ResolvedChargeShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedChargeShotAbilityClass, 1, INDEX_NONE, this));
+			if (ResolvedHitReactionAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedHitReactionAbilityClass, 1, INDEX_NONE, this));
 		}
 	}
 }
@@ -404,14 +418,13 @@ void APlayableDragonCharacter::Input_Move(const FInputActionValue& Value)
 			MoveVector.X = MoveValue;
 		}
 
-		if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
+		if (IsLadderTopFinishActive())
 		{
-			TraversalMovementComponent->SetTraversalInputVector(MoveVector);
-
-			if (TraversalMovementComponent->IsInCustomTraversalMode())
+			if (Value.GetValueType() == EInputActionValueType::Axis2D)
 			{
-				return;
+				HandleLadderClimbInput(MoveVector.Y, LadderLookInputThreshold);
 			}
+			return;
 		}
 
 		const bool bHas2DMoveInput = Value.GetValueType() == EInputActionValueType::Axis2D;
@@ -425,6 +438,16 @@ void APlayableDragonCharacter::Input_Move(const FInputActionValue& Value)
 		{
 			SetLadderClimbInput(0.0f);
 			return;
+		}
+
+		if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
+		{
+			TraversalMovementComponent->SetTraversalInputVector(MoveVector);
+
+			if (TraversalMovementComponent->IsInCustomTraversalMode())
+			{
+				return;
+			}
 		}
 
 		const FVector MoveDir = FVector(1.0f, 0.0f, 0.0f);
@@ -479,6 +502,17 @@ UInputAction* APlayableDragonCharacter::ResolveLookAction()
 
 void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
+	if (IsOnLadder())
+	{
+		PerformLadderJump();
+		return;
+	}
+
 	bool bCanceledDashForJump = false;
 
 	if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
@@ -490,12 +524,6 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 		}
 
 		bCanceledDashForJump = bWasDashing && !TraversalMovementComponent->IsDashing();
-	}
-
-	if (!bCanceledDashForJump && IsOnLadder())
-	{
-		PerformLadderJump();
-		return;
 	}
 
 	bool bIsHoldingDown = bIsCrouched || (GetTraversalMovementComponent() && GetTraversalMovementComponent()->GetTraversalInputVector().Y < CrouchInputThreshold);
@@ -543,6 +571,11 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_JumpEnd(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
 	{
 		TraversalMovementComponent->HandleTraversalJumpReleased();
@@ -574,6 +607,11 @@ void APlayableDragonCharacter::Input_JumpEnd(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_Dash(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
 		if (const TSubclassOf<UGameplayAbility> ResolvedDashAbilityClass = ResolveDashAbilityClass())
@@ -585,6 +623,11 @@ void APlayableDragonCharacter::Input_Dash(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_CrouchStart(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	bCrouchActionHeld = true;
 	BeginCrouchRequest(Value);
 }
@@ -592,6 +635,11 @@ void APlayableDragonCharacter::Input_CrouchStart(const FInputActionValue& Value)
 void APlayableDragonCharacter::Input_CrouchEnd(const FInputActionValue& Value)
 {
 	bCrouchActionHeld = false;
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (!bMoveCrouchHeld)
 	{
 		EndCrouchRequest(Value);
@@ -600,6 +648,11 @@ void APlayableDragonCharacter::Input_CrouchEnd(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::BeginCrouchRequest(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (IsOnLadder())
 	{
 		PerformLadderCrouch();
@@ -667,6 +720,11 @@ void APlayableDragonCharacter::EndCrouchRequest(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_BaseShot(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (bUseUnifiedShotInput && ChargeShotAction)
 	{
 		return;
@@ -683,6 +741,11 @@ void APlayableDragonCharacter::Input_BaseShot(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_ChargeShotStart(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (bChargeShotInputHeld)
 	{
 		return;
@@ -707,6 +770,10 @@ void APlayableDragonCharacter::Input_ChargeShotEnd(const FInputActionValue& Valu
 	}
 
 	bChargeShotInputHeld = false;
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
 
 	// Tell GA_DragonChargeShot to release and fire
 	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
@@ -723,6 +790,11 @@ void APlayableDragonCharacter::Input_ChargeShotEnd(const FInputActionValue& Valu
 
 void APlayableDragonCharacter::Input_FlyToggle(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (const UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
 	{
 		if (TraversalMovementComponent->IsTraversalStateActive())
@@ -755,6 +827,11 @@ void APlayableDragonCharacter::Input_FlyToggle(const FInputActionValue& Value)
 
 void APlayableDragonCharacter::Input_GlideStart(const FInputActionValue& Value)
 {
+	if (IsLadderTopFinishActive())
+	{
+		return;
+	}
+
 	if (const UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
 	{
 		if (TraversalMovementComponent->IsTraversalStateActive())

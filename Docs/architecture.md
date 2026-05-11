@@ -82,9 +82,10 @@ Plugins/CookieBrosPlatformer/Source/CookieBrosPlatformer/
 ├── Interfaces/           damage/save/checkpoint/pickup contracts
 ├── Platformer/
 │   ├── Camera/           APlatformerCameraManager
-│   ├── Environment/      blocks, platforms, hazards, teleporter, ladder, etc.
+│   ├── Environment/      blocks, platforms, hazards, teleporter, ladder, checkpoint, camera volume, etc.
+│   │   └── Components/   reusable environment helpers such as UPlatformerPathComponent
 │   ├── Character/        platformer interaction contracts
-│   └── Systems/          checkpoint actor shell
+│   └── Systems/          checkpoint subsystem
 ├── Traversal/            traversal components and movement
 ├── UI/                   reusable dev/settings/health widgets
 └── Projectiles/          base projectile shells
@@ -169,6 +170,14 @@ Source/DragonSlayer/
 - `APlatformerCameraManager` живе у плагіні як reusable side-view camera shell;
 - поточна камера використовує smooth follow і movement-based look-ahead;
 - фіксація через `Camera XMin Bounds` / `Camera XMax Bounds` більше не є частиною актуальної поведінки.
+
+### Environment Components
+
+- `UPlatformerPathComponent` живе у плагіні як reusable local-space path data component;
+- кожна path-точка зберігає `PointLocation`, `PointDelay`, `SpeedScale`, а сам компонент зберігає `bRepeatPath`;
+- Enemy patrol, moving platform / triggered lift / closing door routes і camera volume New/Default positions використовують його замість локального дублювання path state;
+- viewport preview для цього компонента малюється його editor debug render proxy: red lines / point markers / index labels без дочірніх debug components на runtime акторах; у game world proxy не створюється;
+- editor component visualizer дає selectable/movable point handles, а moving platform-derived actors читають route, delay, speed scale і repeat mode з `UPlatformerPathComponent`, не з окремих `PointA` / `PointB` scene components чи дублюючих actor-полів.
 
 ---
 

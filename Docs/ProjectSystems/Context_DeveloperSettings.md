@@ -191,6 +191,14 @@ Camera manager apply:
 - `APlatformerCameraManager::ApplyDeveloperCameraManagerSettings()` applies projection, ortho width, idle threshold, look-ahead offsets, interpolation speeds, dead zone, bound box, and crouch smoothing.
 - The camera manager converts designer-facing `DeveloperCameraManagerIdleSpeedThreshold` from m/s to cm/s by multiplying by `100`.
 
+Camera volumes:
+
+- `APlatformerCameraVolume` uses `FPlatformerCameraVolumeSettings` for placed level camera overrides.
+- The volume settings include camera rig values (`CameraLocation`, `CameraRotation`, `SpringArmLocation`, `SpringArmRotation`, `SpringArmLength`) and camera manager values with designer-facing names (`HorizontalOffset`, `DeadZoneWidth`, etc.).
+- Entering `NewCameraVolume` blends the current `APlatformerCameraManager` settings to the actor's target settings over `BlendTime` using EaseInEaseOut.
+- Entering `DefaultCameraVolume` blends back to the camera manager settings captured before the first override.
+- This is transient runtime level behavior. It must not save into `UPlatformerDeveloperSettingsSubsystem` slots.
+
 ## Runtime Auto-Load
 
 Character:

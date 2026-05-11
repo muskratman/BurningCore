@@ -13,4 +13,5 @@ namespace PlatformerAnimGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG(Anim_Combat_RangedShot, "Anim.Combat.RangedShot");
 	UE_DEFINE_GAMEPLAY_TAG(Anim_Combat_RangedChargeLoop, "Anim.Combat.RangedChargeLoop");
 	UE_DEFINE_GAMEPLAY_TAG(Anim_Combat_HitReaction, "Anim.Combat.HitReaction");
+	UE_DEFINE_GAMEPLAY_TAG(Anim_Combat_Death, "Anim.Combat.Death");
 }

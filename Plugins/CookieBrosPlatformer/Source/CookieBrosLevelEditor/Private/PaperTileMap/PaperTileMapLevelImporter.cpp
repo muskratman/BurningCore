@@ -16,10 +16,13 @@
 #include "PaperTileSet.h"
 #include "Platformer/Environment/PlatformerBlock.h"
 #include "Platformer/Environment/PlatformerBlockBase.h"
+#include "Platformer/Environment/PlatformerCameraVolume.h"
 #include "Platformer/Environment/PlatformerConveyor.h"
 #include "Platformer/Environment/PlatformerDangerBlock.h"
 #include "Platformer/Environment/PlatformerGravityVolume.h"
+#include "Platformer/Environment/PlatformerHalfBlock.h"
 #include "Platformer/Environment/PlatformerLadder.h"
+#include "Platformer/Environment/PlatformerLadderTop.h"
 #include "Platformer/Environment/PlatformerLightningBase.h"
 #include "Platformer/Environment/PlatformerMovingPlatform.h"
 #include "Platformer/Environment/PlatformerRamp.h"
@@ -46,6 +49,7 @@ namespace CookieBrosPaperTileMapImport
 	enum class EImportedActorKind : uint8
 	{
 		Block,
+		HalfBlock,
 		SoftPlatform,
 		Spikes,
 		Ramp,
@@ -55,6 +59,7 @@ namespace CookieBrosPaperTileMapImport
 		TriggeredLift,
 		Stream,
 		GravityVolume,
+		CameraVolume,
 		Switch,
 		GenericActor
 	};
@@ -70,11 +75,6 @@ namespace CookieBrosPaperTileMapImport
 
 	struct FResolvedTileCell
 	{
-		struct FBlockTileDescriptor
-		{
-			EPlatformerBlockMeshVariant MeshVariant = EPlatformerBlockMeshVariant::FullSize;
-		};
-
 		struct FRampTileDescriptor
 		{
 			bool bIsRamp = false;
@@ -85,7 +85,6 @@ namespace CookieBrosPaperTileMapImport
 		FPaperTileInfo TileInfo;
 		FName UserDataName = NAME_None;
 		int32 SourceLayerIndex = INDEX_NONE;
-		FBlockTileDescriptor BlockDescriptor;
 		FRampTileDescriptor RampDescriptor;
 	};
 
@@ -102,7 +101,8 @@ namespace CookieBrosPaperTileMapImport
 		int32 TileY = INDEX_NONE;
 		int32 TileSpanX = 1;
 		int32 TileSpanY = 1;
-		EPlatformerBlockMeshVariant BlockMeshVariant = EPlatformerBlockMeshVariant::FullSize;
+		bool bHalfTop = false;
+		bool bLadderTopSectionEnabled = true;
 		int32 RampAngleDegrees = INDEX_NONE;
 		FResolvedTileCell ResolvedCell;
 		FSpawnRecipe SpawnRecipe;
@@ -235,6 +235,11 @@ namespace CookieBrosPaperTileMapImport
 			return EImportedActorKind::SoftPlatform;
 		}
 
+		if ((ActorClass != nullptr) && ActorClass->IsChildOf(APlatformerHalfBlock::StaticClass()))
+		{
+			return EImportedActorKind::HalfBlock;
+		}
+
 		if ((ActorClass != nullptr) && ActorClass->IsChildOf(APlatformerSpikes::StaticClass()))
 		{
 			return EImportedActorKind::Spikes;
@@ -263,6 +268,11 @@ namespace CookieBrosPaperTileMapImport
 		if ((ActorClass != nullptr) && ActorClass->IsChildOf(APlatformerGravityVolume::StaticClass()))
 		{
 			return EImportedActorKind::GravityVolume;
+		}
+
+		if ((ActorClass != nullptr) && ActorClass->IsChildOf(APlatformerCameraVolume::StaticClass()))
+		{
+			return EImportedActorKind::CameraVolume;
 		}
 
 		if ((ActorClass != nullptr) && ActorClass->IsChildOf(APlatformerSwitch::StaticClass()))
@@ -308,6 +318,101 @@ namespace CookieBrosPaperTileMapImport
 		return true;
 	}
 
+	bool IsHalfBlockTopUserDataName(FName UserDataName)
+	{
+		return UserDataName.ToString().Equals(TEXT("HalfBlockTop"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsHalfBlockBotUserDataName(FName UserDataName)
+	{
+		return UserDataName.ToString().Equals(TEXT("HalfBlockBot"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsHalfBlockUserDataName(FName UserDataName)
+	{
+		return IsHalfBlockTopUserDataName(UserDataName) || IsHalfBlockBotUserDataName(UserDataName);
+	}
+
+	bool IsLadderUserDataName(FName UserDataName)
+	{
+		return UserDataName.ToString().Equals(TEXT("Ladder"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsLadderTopUserDataName(FName UserDataName)
+	{
+		return UserDataName.ToString().Equals(TEXT("LadderTop"), ESearchCase::IgnoreCase);
+	}
+
+	bool IsTileMapLadderUserDataName(FName UserDataName)
+	{
+		return IsLadderUserDataName(UserDataName) || IsLadderTopUserDataName(UserDataName);
+	}
+
+	bool TryResolveBuiltInSpawnRecipe(FName UserDataName, FSpawnRecipe& OutRecipe)
+	{
+		if (!IsHalfBlockUserDataName(UserDataName))
+		{
+			return false;
+		}
+
+		OutRecipe.ActorClass = APlatformerHalfBlock::StaticClass();
+		OutRecipe.ActorKind = EImportedActorKind::HalfBlock;
+		OutRecipe.DebugName = UserDataName;
+		return true;
+	}
+
+	void ResolveTileMapLadderTopSpawnRecipe(const UTileSetAsset* ImportMappingAsset, FSpawnRecipe& OutRecipe)
+	{
+		FSpawnRecipe MappedRecipe;
+		if (TryResolveImportMappingSpawnRecipe(ImportMappingAsset, FName(TEXT("LadderTop")), MappedRecipe))
+		{
+			if (const UClass* MappedActorClass = MappedRecipe.ActorClass.Get())
+			{
+				if (MappedActorClass->IsChildOf(APlatformerLadderTop::StaticClass()))
+				{
+					OutRecipe = MappedRecipe;
+					OutRecipe.ActorKind = EImportedActorKind::Ladder;
+					OutRecipe.DebugName = FName(TEXT("LadderTop"));
+					return;
+				}
+
+				UE_LOG(
+					LogCookieBrosPaperTileMapImport,
+					Warning,
+					TEXT("Import mapping rule 'LadderTop' uses class '%s', but TileMap ladder runs require APlatformerLadderTop. Falling back to native APlatformerLadderTop."),
+					*MappedActorClass->GetName());
+			}
+		}
+
+		OutRecipe.ActorClass = APlatformerLadderTop::StaticClass();
+		OutRecipe.ActorKind = EImportedActorKind::Ladder;
+		OutRecipe.DebugName = FName(TEXT("LadderTop"));
+	}
+
+	void NormalizeTileMapLadderPreparedSpawns(TArray<FPreparedSpawn>& PreparedSpawns, const UTileSetAsset* ImportMappingAsset)
+	{
+		FSpawnRecipe LadderTopSpawnRecipe;
+		bool bHasLadderTopSpawnRecipe = false;
+
+		for (FPreparedSpawn& PreparedSpawn : PreparedSpawns)
+		{
+			if ((PreparedSpawn.SpawnRecipe.ActorKind != EImportedActorKind::Ladder)
+				|| !IsTileMapLadderUserDataName(PreparedSpawn.ResolvedCell.UserDataName))
+			{
+				continue;
+			}
+
+			if (!bHasLadderTopSpawnRecipe)
+			{
+				ResolveTileMapLadderTopSpawnRecipe(ImportMappingAsset, LadderTopSpawnRecipe);
+				bHasLadderTopSpawnRecipe = true;
+			}
+
+			PreparedSpawn.SpawnRecipe = LadderTopSpawnRecipe;
+			PreparedSpawn.bLadderTopSectionEnabled = IsLadderTopUserDataName(PreparedSpawn.ResolvedCell.UserDataName);
+		}
+	}
+
 	bool TryParseRampTileDescriptor(FName UserDataName, FResolvedTileCell::FRampTileDescriptor& OutDescriptor)
 	{
 		FString DescriptorString = UserDataName.ToString().TrimStartAndEnd();
@@ -338,11 +443,6 @@ namespace CookieBrosPaperTileMapImport
 		return true;
 	}
 
-	bool IsHalfBlockUserDataName(FName UserDataName)
-	{
-		return UserDataName.ToString().Equals(TEXT("HalfBlock"), ESearchCase::IgnoreCase);
-	}
-
 	bool TryGetResolvedTileCell(const UPaperTileMap& TileMap, int32 TileX, int32 TileY, FResolvedTileCell& OutCell)
 	{
 		for (int32 LayerIndex = TileMap.TileLayers.Num() - 1; LayerIndex >= 0; --LayerIndex)
@@ -362,9 +462,6 @@ namespace CookieBrosPaperTileMapImport
 			OutCell.TileInfo = TileInfo;
 			OutCell.UserDataName = TileInfo.TileSet->GetTileUserData(TileInfo.GetTileIndex());
 			OutCell.SourceLayerIndex = LayerIndex;
-			OutCell.BlockDescriptor.MeshVariant = IsHalfBlockUserDataName(OutCell.UserDataName)
-				? EPlatformerBlockMeshVariant::HalfSize
-				: EPlatformerBlockMeshVariant::FullSize;
 			TryParseRampTileDescriptor(OutCell.UserDataName, OutCell.RampDescriptor);
 			return true;
 		}
@@ -405,8 +502,7 @@ namespace CookieBrosPaperTileMapImport
 
 	bool IsPlainMergeableBlockUserDataName(FName UserDataName)
 	{
-		return UserDataName.ToString().Equals(TEXT("Block"), ESearchCase::IgnoreCase)
-			|| UserDataName.ToString().Equals(TEXT("HalfBlock"), ESearchCase::IgnoreCase);
+		return UserDataName.ToString().Equals(TEXT("Block"), ESearchCase::IgnoreCase);
 	}
 
 	bool IsHorizontalMergeCandidate(const FPreparedSpawn& PreparedSpawn)
@@ -420,6 +516,7 @@ namespace CookieBrosPaperTileMapImport
 		if (PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::MovingPlatform
 			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::TriggeredLift
 			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::SoftPlatform
+			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::HalfBlock
 			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::Spikes)
 		{
 			return true;
@@ -448,14 +545,15 @@ namespace CookieBrosPaperTileMapImport
 	bool IsRectangleMergeCandidate(const FPreparedSpawn& PreparedSpawn)
 	{
 		return PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::Stream
-			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::GravityVolume;
+			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::GravityVolume
+			|| PreparedSpawn.SpawnRecipe.ActorKind == EImportedActorKind::CameraVolume;
 	}
 
 	bool ArePreparedSpawnsMergeCompatible(const FPreparedSpawn& Left, const FPreparedSpawn& Right)
 	{
 		return (Left.SpawnRecipe.ActorClass == Right.SpawnRecipe.ActorClass)
 			&& (Left.SpawnRecipe.ActorKind == Right.SpawnRecipe.ActorKind)
-			&& (Left.BlockMeshVariant == Right.BlockMeshVariant)
+			&& (Left.bHalfTop == Right.bHalfTop)
 			&& (Left.RampAngleDegrees == Right.RampAngleDegrees)
 			&& (Left.ResolvedCell.SourceLayerIndex == Right.ResolvedCell.SourceLayerIndex)
 			&& Left.LocalSpawnTransform.GetRotation().Equals(Right.LocalSpawnTransform.GetRotation(), KINDA_SMALL_NUMBER)
@@ -676,10 +774,13 @@ namespace CookieBrosPaperTileMapImport
 			{
 				BlockBase->SetBlockSize(ResolvedSolidActorSize);
 			}
+			break;
 
-			if (APlatformerBlock* Block = Cast<APlatformerBlock>(&SpawnedActor))
+		case EImportedActorKind::HalfBlock:
+			if (APlatformerHalfBlock* HalfBlock = Cast<APlatformerHalfBlock>(&SpawnedActor))
 			{
-				Block->SetBlockMeshVariant(PreparedSpawn.BlockMeshVariant);
+				HalfBlock->SetHalfTop(PreparedSpawn.bHalfTop);
+				HalfBlock->SetPlatformSize(ResolvedSolidActorSize);
 			}
 			break;
 
@@ -726,6 +827,14 @@ namespace CookieBrosPaperTileMapImport
 			}
 			break;
 
+		case EImportedActorKind::CameraVolume:
+			if (APlatformerCameraVolume* CameraVolume = Cast<APlatformerCameraVolume>(&SpawnedActor))
+			{
+				CameraVolume->SetVolumeSizeNew(ResolvedDeepRectActorSize);
+				CameraVolume->SetVolumeSizeDefault(ResolvedDeepRectActorSize);
+			}
+			break;
+
 		case EImportedActorKind::Ladder:
 			if (APlatformerLadder* Ladder = Cast<APlatformerLadder>(&SpawnedActor))
 			{
@@ -734,6 +843,12 @@ namespace CookieBrosPaperTileMapImport
 				Ladder->SetLadderSize(ResolvedRectActorSize);
 				Ladder->SetClimbVolumeTransformOffset(ClimbVolumeOffset);
 				Ladder->SetSnapCharacterDepthToLadder(false);
+
+				if (APlatformerLadderTop* LadderTop = Cast<APlatformerLadderTop>(Ladder))
+				{
+					LadderTop->SetTopBlockDepth(ResolvedSolidActorSize.Y);
+					LadderTop->SetTopSectionEnabled(PreparedSpawn.bLadderTopSectionEnabled);
+				}
 			}
 			break;
 
@@ -788,11 +903,16 @@ namespace CookieBrosPaperTileMapImport
 		case EImportedActorKind::TriggeredLift:
 			return PreparedSpawn.LocalSpawnTransform.GetLocation().Z + SolidActorSize.Z;
 
+		case EImportedActorKind::HalfBlock:
+			return PreparedSpawn.LocalSpawnTransform.GetLocation().Z
+				+ (PreparedSpawn.bHalfTop ? SolidActorSize.Z : SolidActorSize.Z * 0.5f);
+
 		case EImportedActorKind::Spikes:
 		case EImportedActorKind::Ladder:
 		case EImportedActorKind::PlayerStart:
 		case EImportedActorKind::Stream:
 		case EImportedActorKind::GravityVolume:
+		case EImportedActorKind::CameraVolume:
 		case EImportedActorKind::Switch:
 		case EImportedActorKind::GenericActor:
 		default:
@@ -805,6 +925,7 @@ namespace CookieBrosPaperTileMapImport
 		switch (ActorKind)
 		{
 		case EImportedActorKind::Block:
+		case EImportedActorKind::HalfBlock:
 		case EImportedActorKind::SoftPlatform:
 		case EImportedActorKind::Spikes:
 		case EImportedActorKind::Ramp:
@@ -982,7 +1103,8 @@ namespace CookieBrosPaperTileMapImport
 				}
 
 				FSpawnRecipe SpawnRecipe;
-				if (!TryResolveImportMappingSpawnRecipe(ImportMappingAsset, ResolvedCell.UserDataName, SpawnRecipe))
+				if (!TryResolveImportMappingSpawnRecipe(ImportMappingAsset, ResolvedCell.UserDataName, SpawnRecipe)
+					&& !TryResolveBuiltInSpawnRecipe(ResolvedCell.UserDataName, SpawnRecipe))
 				{
 					if (!ResolvedCell.UserDataName.IsNone() && !WarnedUserDataNames.Contains(ResolvedCell.UserDataName))
 					{
@@ -1002,7 +1124,7 @@ namespace CookieBrosPaperTileMapImport
 				FPreparedSpawn& PreparedSpawn = PreparedSpawns.AddDefaulted_GetRef();
 				PreparedSpawn.TileX = TileX;
 				PreparedSpawn.TileY = TileY;
-				PreparedSpawn.BlockMeshVariant = ResolvedCell.BlockDescriptor.MeshVariant;
+				PreparedSpawn.bHalfTop = IsHalfBlockTopUserDataName(ResolvedCell.UserDataName);
 				PreparedSpawn.RampAngleDegrees = ResolvedCell.RampDescriptor.bIsRamp ? ResolvedCell.RampDescriptor.AngleDegrees : INDEX_NONE;
 				PreparedSpawn.ResolvedCell = ResolvedCell;
 				PreparedSpawn.SpawnRecipe = SpawnRecipe;
@@ -1015,6 +1137,8 @@ namespace CookieBrosPaperTileMapImport
 					LocationScaleXZ);
 			}
 		}
+
+		NormalizeTileMapLadderPreparedSpawns(PreparedSpawns, ImportMappingAsset);
 
 		FVector LevelTranslation = FVector::ZeroVector;
 		int32 PrimaryPlayerStartIndex = INDEX_NONE;

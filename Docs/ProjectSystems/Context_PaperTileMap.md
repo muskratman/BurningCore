@@ -70,7 +70,6 @@ The importer reads the topmost rendered tile layer at each tile coordinate and r
 - `FPaperTileInfo`
 - TileSet `UserDataName`
 - source layer index
-- block mesh variant
 - ramp descriptor
 
 `UTileSetAsset::FindRuleByUserDataName()` maps a `UserDataName` to an actor class. If a tile has no valid mapping, the importer falls back to `APlatformerBlock` and logs a warning.
@@ -78,15 +77,17 @@ The importer reads the topmost rendered tile layer at each tile coordinate and r
 Supported actor kinds are resolved from the mapped actor class:
 
 - block / platformer block base
+- half block
 - soft platform
 - spikes
 - ramp
-- ladder
+- ladder / ladder top
 - player start
 - moving platform
 - triggered lift
 - stream
 - gravity volume
+- camera volume
 - switch
 - generic actor fallback
 
@@ -96,7 +97,9 @@ Ramp metadata is parsed from tile UserData names shaped like:
 Ramp_<AngleDegrees>_<SegmentIndex>
 ```
 
-`HalfBlock` selects the half-size block mesh variant.
+`HalfBlockTop` and `HalfBlockBot` generate `APlatformerHalfBlock`. The importer also resolves these names as built-in rules so generated TileMaps still work when the mapping asset has not been updated yet.
+
+`Ladder` and `LadderTop` TileSet names are normalized into a single generated `APlatformerLadderTop` actor per vertical ladder run. The `LadderTop` mapping rule is used when it points to an `APlatformerLadderTop` class; otherwise the importer falls back to native `APlatformerLadderTop`.
 
 ## Generation Flow
 
@@ -106,9 +109,9 @@ Ramp_<AngleDegrees>_<SegmentIndex>
 4. Resolve cells from rendered layers.
 5. Build prepared spawn records from tile positions and tile permutation flags.
 6. Merge compatible adjacent cells:
-   - horizontal runs for blocks, soft platforms, spikes, moving platforms, triggered lifts
-   - vertical runs for ladders
-   - rectangles for streams and gravity volumes
+   - horizontal runs for blocks, half blocks, soft platforms, spikes, moving platforms, triggered lifts
+   - vertical runs for ladders, spawning only the run's `LadderTop` actor
+   - rectangles for streams, gravity volumes, and camera volumes
 7. Anchor the generated layout around the primary PlayerStart when present.
 8. Spawn lighting/setup actor and generated actors.
 9. Configure actor size/shape based on merged span and block size.
@@ -130,7 +133,7 @@ Solid blocks and ramps use fixed depth:
 ImportedBlockDepth = 500
 ```
 
-Ladders use `BlockSize.Y` as the rear climb volume offset. Streams and gravity volumes use deep rectangular sizes.
+Ladders use `BlockSize.Y` as the rear climb volume offset. The generated `APlatformerLadderTop` ladder mesh and climb volume extend down across the merged vertical TileMap span. Streams, gravity volumes, and camera volumes use deep rectangular sizes.
 
 ## Actor Configuration
 
@@ -138,17 +141,21 @@ Ladders use `BlockSize.Y` as the rear climb volume offset. Streams and gravity v
 
 - `APlatformerRamp::SetRampSize()` and `SetRampAngleDegrees()`
 - `APlatformerBlockBase::SetBlockSize()`
-- `APlatformerBlock::SetBlockMeshVariant()`
+- `APlatformerHalfBlock::SetPlatformSize()` and `SetHalfTop()`
 - `APlatformerSoftPlatform::SetPlatformSize()`
 - `APlatformerSpikes::SetSpikeSize()`
 - `APlatformerTriggeredLift::SetPlatformSize()` and `SetTriggerSize()`
 - `APlatformerMovingPlatform::SetPlatformSize()`
 - `APlatformerStream::SetVolumeSize()`
 - `APlatformerGravityVolume::SetVolumeSize()`
+- `APlatformerCameraVolume::SetVolumeSizeNew()` and `SetVolumeSizeDefault()`
 - `APlatformerLadder::SetLadderSize()`, climb volume offset, and snap-depth behavior
+- `APlatformerLadderTop::SetTopBlockDepth()` and `SetTopSectionEnabled()`
 - `APlatformerSwitch::SetTriggerExtent()`
 
 Generic actor classes are spawned but not specially configured.
+
+For a ladder run whose topmost TileMap cell is `LadderTop`, the top section stays enabled: the top platform mesh, drop-through checks, and top entry volume are active. For a run made only from regular `Ladder` cells, the generated actor still uses `APlatformerLadderTop`, but its top section is hidden and collision-disabled so it behaves like a plain ladder without a walkable cap.
 
 ## Regeneration Rules
 

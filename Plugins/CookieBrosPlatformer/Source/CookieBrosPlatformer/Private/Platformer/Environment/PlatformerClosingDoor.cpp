@@ -1,7 +1,6 @@
 #include "Platformer/Environment/PlatformerClosingDoor.h"
 
 #include "Character/PlatformerCharacterBase.h"
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
@@ -25,12 +24,12 @@ APlatformerClosingDoor::APlatformerClosingDoor()
 	TriggerVolume->OnComponentEndOverlap.AddDynamic(this, &APlatformerClosingDoor::OnTriggerEndOverlap);
 
 	PlatformSize = FVector(100.0f, 100.0f, 100.0f);
-	PointBBaseRelativeLocation = FVector(0.0f, 0.0f, -300.0f);
+	SetMovementPathPoints({
+		FPlatformerPathPoint(FVector::ZeroVector),
+		FPlatformerPathPoint(FVector(0.0f, 0.0f, -300.0f))
+	});
 	MoveSpeed = 600.0f;
-	PointADelay = 0.0f;
-	PointBDelay = 0.0f;
 	bAutoStart = false;
-	bIsRepeatable = false;
 }
 
 void APlatformerClosingDoor::SetTriggerSize(const FVector& InTriggerSize)
@@ -153,7 +152,7 @@ bool APlatformerClosingDoor::IsValidTriggeringCharacter(AActor* OtherActor, APla
 FVector APlatformerClosingDoor::GetTriggerPassDirection() const
 {
 	const FVector TriggerLocation = TriggerVolume ? TriggerVolume->GetComponentLocation() : GetActorLocation() + TriggerBaseRelativeLocation;
-	const FVector PointALocation = PointA ? PointA->GetComponentLocation() : CachedPointALocation;
+	const FVector PointALocation = GetMovementPathPointWorldLocation(0);
 
 	FVector Direction = TriggerLocation - PointALocation;
 	Direction.Z = 0.0f;

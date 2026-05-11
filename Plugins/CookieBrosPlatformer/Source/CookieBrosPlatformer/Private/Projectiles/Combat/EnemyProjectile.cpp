@@ -1,10 +1,20 @@
 #include "Projectiles/Combat/EnemyProjectile.h"
 
+#include "Components/StaticMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
+
 AEnemyProjectile::AEnemyProjectile()
 {
 	Speed = 1500.0f;
 	Lifetime = 5.0f;
 	bPiercing = false;
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMesh.Succeeded() && MeshComp)
+	{
+		MeshComp->SetStaticMesh(SphereMesh.Object);
+		MeshComp->SetRelativeScale3D(FVector(0.3f));
+	}
 }
 
 void AEnemyProjectile::InitializeProjectile(

@@ -5,6 +5,7 @@
 #include "Character/PlatformerCharacterBase.h"
 #include "GameFramework/Character.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
+#include "GAS/PlatformerGameplayTags.h"
 #include "TimerManager.h"
 #include "Traversal/PlatformerTraversalGameplayTags.h"
 
@@ -15,6 +16,7 @@ UGA_PlatformerChargeShot::UGA_PlatformerChargeShot()
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_Dash);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeHang);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeClimb);
+	ActivationBlockedTags.AddTag(PlatformerGameplayTags::State_Movement_Ladder);
 }
 
 bool UGA_PlatformerChargeShot::CanActivateAbility(
@@ -25,6 +27,12 @@ bool UGA_PlatformerChargeShot::CanActivateAbility(
 	OUT FGameplayTagContainer* OptionalRelevantTags) const
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	const APlatformerCharacterBase* PlatformerCharacter = GetPlatformerCharacter(ActorInfo);
+	if (PlatformerCharacter && (PlatformerCharacter->IsOnLadder() || PlatformerCharacter->IsLadderTopFinishActive()))
 	{
 		return false;
 	}
@@ -99,6 +107,14 @@ void UGA_PlatformerChargeShot::InputReleased(
 	bChargeReleased = true;
 	UpdateChargeStageFromElapsedTime();
 
+	const APlatformerCharacterBase* PlatformerCharacter = GetPlatformerCharacter(ActorInfo);
+	if (PlatformerCharacter && (PlatformerCharacter->IsOnLadder() || PlatformerCharacter->IsLadderTopFinishActive()))
+	{
+		ClearChargeState(ActorInfo);
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
+
 	FPlatformerChargeShotTuning ChargeTuning;
 	const bool bHasChargeTuning = GetChargeShotTuning(ActorInfo, ChargeTuning);
 
@@ -114,9 +130,17 @@ void UGA_PlatformerChargeShot::InputReleased(
 		}
 	}
 
-	if (bShotFired && bHasChargeTuning && ChargeTuning.ReleaseCueTag.IsValid())
+	if (bShotFired)
 	{
-		ExecuteGameplayCue(ActorInfo, ChargeTuning.ReleaseCueTag);
+		// Charge shot is conceptually a "powered-up base shot"; reuse the same release
+		// animation tag so the AnimDataAsset only needs one RangedShot entry. Plays only
+		// when the DA contains an entry for the tag — silent no-op otherwise.
+		PlayAbilityAnimation(ActorInfo, PlatformerAnimGameplayTags::Anim_Combat_RangedShot);
+
+		if (bHasChargeTuning && ChargeTuning.ReleaseCueTag.IsValid())
+		{
+			ExecuteGameplayCue(ActorInfo, ChargeTuning.ReleaseCueTag);
+		}
 	}
 
 	ClearChargeState(ActorInfo);

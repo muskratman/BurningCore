@@ -3,7 +3,10 @@
 #include "Core/PlatformerGameModeBase.h"
 
 #include "AI/PlatformerBossBase.h"
-#include "Platformer/Systems/PlatformerCheckpointActor.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Platformer/Environment/PlatformerCheckpoint.h"
+#include "Platformer/Systems/PlatformerCheckpointSubsystem.h"
 
 APlatformerGameModeBase::APlatformerGameModeBase()
 {
@@ -11,7 +14,13 @@ APlatformerGameModeBase::APlatformerGameModeBase()
 
 void APlatformerGameModeBase::RespawnPlayerAtCheckpoint()
 {
-	UE_LOG(LogTemp, Log, TEXT("Respawn requested at the active checkpoint."));
+	if (UWorld* World = GetWorld())
+	{
+		if (UPlatformerCheckpointSubsystem* CheckpointSubsystem = World->GetSubsystem<UPlatformerCheckpointSubsystem>())
+		{
+			CheckpointSubsystem->RespawnPlayerAtCheckpoint(UGameplayStatics::GetPlayerController(this, 0));
+		}
+	}
 }
 
 void APlatformerGameModeBase::ActivateBossEncounter(APlatformerBossBase* Boss)
@@ -25,14 +34,21 @@ void APlatformerGameModeBase::OnLevelCompleted()
 	UE_LOG(LogTemp, Log, TEXT("Level completed."));
 }
 
-void APlatformerGameModeBase::RegisterCheckpoint(APlatformerCheckpointActor* Checkpoint)
+void APlatformerGameModeBase::RegisterCheckpoint_Implementation(APlatformerCheckpoint* Checkpoint)
 {
-	RegisterCheckpointActor_Implementation(Checkpoint);
-}
+	if (!IsValid(Checkpoint))
+	{
+		return;
+	}
 
-void APlatformerGameModeBase::RegisterCheckpointActor_Implementation(APlatformerCheckpointActor* Checkpoint)
-{
 	LastCheckpoint = Checkpoint;
+	if (UWorld* World = GetWorld())
+	{
+		if (UPlatformerCheckpointSubsystem* CheckpointSubsystem = World->GetSubsystem<UPlatformerCheckpointSubsystem>())
+		{
+			CheckpointSubsystem->ActivateCheckpoint(Checkpoint);
+		}
+	}
 }
 
 void APlatformerGameModeBase::RegisterBossEncounterActor_Implementation(APlatformerBossBase* Boss)

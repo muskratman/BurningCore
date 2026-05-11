@@ -11,7 +11,7 @@
 
 class ACharacter;
 class APlatformerBossBase;
-class APlatformerCheckpointActor;
+class APlatformerCheckpoint;
 class APlatformerPickup;
 
 /**
@@ -35,21 +35,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Flow")
 	virtual void OnLevelCompleted();
 
-	UFUNCTION(BlueprintCallable, Category="Checkpoint")
-	void RegisterCheckpoint(APlatformerCheckpointActor* Checkpoint);
-
-	virtual void RegisterCheckpointActor_Implementation(APlatformerCheckpointActor* Checkpoint) override;
+	virtual void RegisterCheckpoint_Implementation(APlatformerCheckpoint* Checkpoint) override;
 	virtual void RegisterBossEncounterActor_Implementation(APlatformerBossBase* Boss) override;
 	virtual void ProcessPlatformerPickup_Implementation(APlatformerPickup* Pickup, ACharacter* Collector) override;
 
-	FORCEINLINE APlatformerCheckpointActor* GetLastCheckpoint() const { return LastCheckpoint; }
+	FORCEINLINE APlatformerCheckpoint* GetLastCheckpoint() const { return LastCheckpoint; }
 	FORCEINLINE int32 GetPickupsCollected() const { return PickupsCollected; }
 
 protected:
 	virtual void HandlePickupCollected(APlatformerPickup* Pickup, ACharacter* Collector);
 
 	UPROPERTY()
-	TObjectPtr<APlatformerCheckpointActor> LastCheckpoint;
+	TObjectPtr<APlatformerCheckpoint> LastCheckpoint;
 
 	UPROPERTY(BlueprintReadOnly, Category="Pickups")
 	int32 PickupsCollected = 0;

@@ -1,0 +1,10 @@
+Ultra-wide 2.5D side-scrolling platformer environment. No UI, no characters. Three distinct depth layers:
+FOREGROUND — [gameplay path: platforms, terrain objects]. Maximum texture detail, small debris visible.
+MIDGROUND — [near environment: large props, structures, vegetation]. Slightly softer, provides scene context.
+BACKGROUND — [distant elements: mountains, sky, horizon]. Soft-focus, atmospheric, defines scale and mood.
+
+Lighting: [lighting source and effect]. Palette: [3–4 core colors]. Mood: [one word or short phrase].
+
+Style: AAA game environment art. Photorealistic materials and textures — stone, ice, wood, soil rendered with physical accuracy, fine micro-detail, natural wear and weathering. Lighting is physically grounded. The visual quality of a high-budget PC/console fantasy RPG background. Epic, monumental, cinematic high fantasy tone — weighty, ancient, historically grounded. No cel-shading, no toon shading, no visible brushstrokes, no stylization of any kind.
+
+Strictly avoid: pixel art, cartoon style, thick outlines, rubbery/rounded forms, bright toy colors, whimsical or childlike aesthetics.

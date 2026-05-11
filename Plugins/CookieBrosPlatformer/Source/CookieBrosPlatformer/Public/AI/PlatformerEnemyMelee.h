@@ -26,5 +26,6 @@ protected:
 	virtual float GetAttackRange() const override;
 	virtual float GetAttackCooldown() const override;
 	virtual float GetAttackDamageAmount() const override;
-	virtual bool PerformAttack(APlatformerCombatCharacterBase* TargetActor) override;
+	virtual bool ApplyAttackHit(APlatformerCombatCharacterBase* TargetActor) override;
+	virtual FGameplayTag GetAttackAnimationTagForTarget(const APlatformerCombatCharacterBase* TargetActor) const override;
 };

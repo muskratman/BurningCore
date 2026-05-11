@@ -78,7 +78,9 @@ protected:
 	virtual void OnCombatDamageReceived(float DamageAmount, const FHitResult& HitResult, AActor* DamageInstigatorActor);
 	virtual void OnCombatDeath(AActor* DamageInstigatorActor);
 	virtual void OnCombatRevived();
+	virtual void HandleCombatDeathAftermath(AActor* DamageInstigatorActor);
 	virtual float GetHealthWidgetVerticalPadding() const;
+	void BroadcastCombatHitReceivedEvent(float DamageAmount, const FHitResult& HitResult, AActor* DamageInstigatorActor);
 	void RefreshHealthWidget();
 	void UpdateHealthWidgetPlacement();
 	void SyncCombatLifeStateFromAttributes();

@@ -14,3 +14,13 @@ UDragonAttributeSet* ADragonCharacter::GetDragonAttributeSet() const
 {
 	return Cast<UDragonAttributeSet>(AttributeSet);
 }
+
+void ADragonCharacter::OnCombatDamageReceived(float DamageAmount, const FHitResult& HitResult, AActor* DamageInstigatorActor)
+{
+	Super::OnCombatDamageReceived(DamageAmount, HitResult, DamageInstigatorActor);
+
+	if (IsAlive())
+	{
+		BroadcastCombatHitReceivedEvent(DamageAmount, HitResult, DamageInstigatorActor);
+	}
+}

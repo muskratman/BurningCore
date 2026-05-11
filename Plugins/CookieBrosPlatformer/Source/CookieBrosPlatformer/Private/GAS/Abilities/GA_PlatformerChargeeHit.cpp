@@ -1,6 +1,7 @@
 #include "GAS/Abilities/GA_PlatformerChargeeHit.h"
 
 #include "Animation/PlatformerAnimGameplayTags.h"
+#include "Character/PlatformerCharacterBase.h"
 #include "GameFramework/Character.h"
 #include "TimerManager.h"
 #include "Traversal/PlatformerTraversalGameplayTags.h"
@@ -58,6 +59,14 @@ void UGA_PlatformerChargeeHit::InputReleased(
 	}
 
 	bChargeReleased = true;
+
+	const APlatformerCharacterBase* PlatformerCharacter = GetPlatformerCharacter(ActorInfo);
+	if (PlatformerCharacter && (PlatformerCharacter->IsOnLadder() || PlatformerCharacter->IsLadderTopFinishActive()))
+	{
+		ClearChargeState(ActorInfo);
+		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
+		return;
+	}
 
 	StopAbilityAnimation(ActorInfo,
 		PlatformerAnimGameplayTags::Anim_Combat_MeleeChargeLoop,

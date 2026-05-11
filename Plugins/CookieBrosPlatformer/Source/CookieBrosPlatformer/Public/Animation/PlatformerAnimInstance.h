@@ -7,9 +7,13 @@
 
 class APlatformerCharacterBase;
 class UAbilitySystemComponent;
-class UPlatformerAnimDataAsset;
-class UPlatformerTraversalMovementComponent;
 class UAnimMontage;
+class UAnimSequence;
+class UBlendSpace;
+class UAimOffsetBlendSpace;
+class UPlatformerAnimDataAsset;
+class UPlatformerLocomotionAnimSet;
+class UPlatformerTraversalMovementComponent;
 
 /**
  * UPlatformerAnimInstance
@@ -77,6 +81,16 @@ protected:
 	/** Update ledge grab phase helpers from traversal runtime data. */
 	virtual void UpdateLedgeGrabStateProperties(float DeltaSeconds);
 
+	/**
+	 * Update landing state. Must be called after UpdateLadderStateProperties
+	 * and UpdateLedgeGrabStateProperties so their end-states can suppress a
+	 * spurious land trigger.
+	 */
+	virtual void UpdateLandingStateProperties(float DeltaSeconds);
+
+	/** Update LookYaw / LookPitch from the owning character's control rotation. */
+	virtual void UpdateLookProperties();
+
 	/** Update montage-driven ability state helpers from AnimData mappings. */
 	virtual void UpdateAbilityMontageProperties();
 
@@ -100,6 +114,12 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement")
 	float LadderClimbInput = 0.0f;
 
+	/** Actual ladder climb speed: Abs(Velocity.Z) while on ladder, 0 otherwise.
+	 *  Use this as the BlendSpace axis for ladder loop, not LadderClimbInput,
+	 *  so the animation freezes when the character stops despite held input. */
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement")
+	float LadderSpeed = 0.0f;
+
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement")
 	float MovementDirectionX = 0.0f;
 
@@ -121,11 +141,30 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement|Derived")
 	bool bShouldFall = false;
 
+	/** True for LandStateDuration seconds after touching ground from air. Only
+	 *  active when LocomotionAnimSet provides a LandSequence. */
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement|Derived")
+	bool bShouldLand = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Platformer|Movement",
+		meta=(ClampMin="0.0", Units="s"))
+	float LandStateDuration = 0.15f;
+
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement|Derived")
 	bool bShouldCrouchIdle = false;
 
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Movement|Derived")
 	bool bShouldCrouchMove = false;
+
+	// === Look / AimOffset ===
+
+	/** Delta yaw between ControlRotation and ActorRotation, clamped to -90..90. */
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Look")
+	float LookYaw = 0.0f;
+
+	/** Delta pitch from ControlRotation, clamped to -90..90. */
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Look")
+	float LookPitch = 0.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Platformer|Traversal|Dash", meta=(ClampMin="0.0", ClampMax="1.0"))
 	float DashStartProgressThreshold = 0.2f;
@@ -245,13 +284,94 @@ protected:
 	bool bIsHitReacting = false;
 
 	UPROPERTY(BlueprintReadOnly, Category="Platformer|Ability Animation")
+	bool bIsDeathAnimating = false;
+
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Ability Animation")
 	bool bIsPlayingAbilityMontage = false;
 
 	// === Animation Data ===
 
-	/** Data asset providing GameplayTag → AnimMontage mapping. */
+	/** GameplayTag → AnimMontage mapping for ability-driven animations. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Platformer|Data")
 	TObjectPtr<UPlatformerAnimDataAsset> AnimData;
+
+	/** Locomotion sequences and blendspaces; cached from the owning character. */
+	UPROPERTY(BlueprintReadOnly, Category="Platformer|Data")
+	TObjectPtr<UPlatformerLocomotionAnimSet> LocomotionAnimSet;
+
+	// === Cached Locomotion Sequences (populated from LocomotionAnimSet at init) ===
+	// Use these directly in AnimBP state machine nodes — no Blueprint boilerplate needed.
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UBlendSpace> CachedLocomotionBS;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UBlendSpace> CachedCrouchBS;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedJumpStartSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedFallLoopSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLandSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedDashStartSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedDashLoopSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedDashEndSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedWallSlideSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedWallJumpSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLadderStartSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UBlendSpace> CachedLadderLoopBS;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLadderEndSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLedgeGrabStartSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLedgeGrabLoopSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAnimSequence> CachedLedgeClimbSequence;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	TObjectPtr<UAimOffsetBlendSpace> CachedLookAimOffset;
+
+	// === Locomotion Feature Toggles (true when the corresponding sequence group is set) ===
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasDash = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasWall = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasLadder = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasLedgeGrab = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasLand = false;
+
+	UPROPERTY(BlueprintReadOnly, Transient, Category="Platformer|Locomotion")
+	bool bHasLook = false;
 
 private:
 	/** Initialize AnimData from the owning character's AnimDataAsset, if available. */
@@ -272,8 +392,10 @@ private:
 	bool bWasDashingLastFrame = false;
 	bool bWasLedgeHangingLastFrame = false;
 	bool bWasLedgeClimbingLastFrame = false;
+	bool bWasInAirLastFrame = false;
 	float DashEndStateTimeRemaining = 0.0f;
 	float LedgeGrabStartStateTimeRemaining = 0.0f;
 	float LedgeGrabEndStateTimeRemaining = 0.0f;
+	float LandStateTimeRemaining = 0.0f;
 	float PreviousFrameVerticalVelocity = 0.0f;
 };

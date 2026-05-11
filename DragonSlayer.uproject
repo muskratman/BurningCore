@@ -40,16 +40,6 @@
 			"Enabled": true
 		},
 		{
-			"Name": "SST",
-			"Enabled": true,
-			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/92a8824c461141ce95f77e454d0c1ba5"
-		},
-		{
-			"Name": "MeleeTrace",
-			"Enabled": true,
-			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/42b0bb860bcd4995b70d40f152a6e9b9"
-		},
-		{
 			"Name": "CascLiveLink",
 			"Enabled": false
 		}

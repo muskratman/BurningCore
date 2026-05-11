@@ -2,11 +2,11 @@
 
 #include "AIController.h"
 #include "AbilitySystemComponent.h"
+#include "Animation/PlatformerEnemyAnimGameplayTags.h"
+#include "Animation/PlatformerEnemyAnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Components/SplineComponent.h"
 #include "Components/StateTreeComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "Data/PlatformerEnemyArchetypeAsset.h"
 #include "EngineUtils.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
@@ -16,7 +16,7 @@
 #include "Perception/AISenseConfig_Damage.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISense_Sight.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
 
 namespace
 {
@@ -54,6 +54,10 @@ APlatformerEnemyBase::APlatformerEnemyBase(const FObjectInitializer& ObjectIniti
 
 	PerceptionComponent = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception"));
 
+	PatrolPathComponent = CreateDefaultSubobject<UPlatformerPathComponent>(TEXT("PatrolPath"));
+	PatrolPathComponent->SetupAttachment(RootComponent);
+	PatrolPathComponent->SetRepeatPath(true);
+
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 	SightConfig->SightRadius = 1500.0f;
 	SightConfig->LoseSightRadius = 2000.0f;
@@ -79,24 +83,6 @@ APlatformerEnemyBase::APlatformerEnemyBase(const FObjectInitializer& ObjectIniti
 
 	ApplyDefaultMeshFacing();
 
-#if WITH_EDITORONLY_DATA
-	PatrolPathSpline = CreateEditorOnlyDefaultSubobject<USplineComponent>(TEXT("PatrolPathSpline"));
-	if (PatrolPathSpline)
-	{
-		PatrolPathSpline->SetupAttachment(RootComponent);
-		PatrolPathSpline->SetClosedLoop(false);
-		PatrolPathSpline->SetHiddenInGame(true);
-		PatrolPathSpline->SetIsVisualizationComponent(true);
-		PatrolPathSpline->bIsEditorOnly = true;
-	}
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	if (SphereMesh.Succeeded())
-	{
-		PatrolPointPreviewMeshAsset = SphereMesh.Object;
-	}
-#endif
-
 	UpdateHealthWidgetPlacement();
 }
 
@@ -105,10 +91,6 @@ void APlatformerEnemyBase::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	ApplyDefaultMeshFacing();
-
-#if WITH_EDITORONLY_DATA
-	RefreshEditorPatrolPreviewComponents();
-#endif
 }
 
 void APlatformerEnemyBase::InitializeFromArchetype(const UPlatformerEnemyArchetypeAsset* Archetype)
@@ -195,6 +177,7 @@ void APlatformerEnemyBase::BeginPlay()
 	PatrolDelayRemaining = 0.0f;
 	PatrolSegmentStartPointIndex = INDEX_NONE;
 	bNeedsPatrolSegmentFacingUpdate = true;
+	bPatrolPathCompleted = false;
 
 	if (!Controller)
 	{
@@ -210,6 +193,11 @@ void APlatformerEnemyBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (IsMovementDelayedByHit())
+	{
+		return;
+	}
+
 	if (!CurrentCombatTarget)
 	{
 		UpdatePatrolMovement(DeltaTime);
@@ -224,13 +212,18 @@ void APlatformerEnemyBase::Tick(float DeltaTime)
 	else
 	{
 		const float CurrentTargetDistance = GetCombatDistanceToTarget(CurrentCombatTarget);
-		if (CurrentTargetDistance <= GetAttackRange())
+		const float CurrentAttackRange = GetAttackRange();
+		if (CurrentTargetDistance <= CurrentAttackRange)
 		{
+			StopPatrolMovement(GetCharacterMovement());
 			ApplyFacingFromDirection(CurrentCombatTarget->GetActorLocation() - GetActorLocation());
 			TryAttackCurrentTarget();
 		}
 
-		bool bShouldChase = bEnablePlayerChase && (CurrentTargetDistance <= ChaseAgroRadius);
+		const bool bIsOutsideAttackComfortRange = CurrentTargetDistance > CurrentAttackRange * 0.8f;
+		const bool bShouldChase = bEnablePlayerChase
+			&& bIsOutsideAttackComfortRange
+			&& CurrentTargetDistance <= FMath::Max(ChaseAgroRadius, CurrentAttackRange);
 		if (bShouldChase)
 		{
 			UpdateChaseMovement(DeltaTime);
@@ -248,7 +241,8 @@ void APlatformerEnemyBase::ApplyEnemyRuntimeSettings()
 	MovementSpeed = FMath::Max(MovementSpeed, 1.0f);
 	Damage = FMath::Max(Damage, 0.0f);
 	HitDelay = FMath::Max(HitDelay, 0.0f);
-	PatrolDelayTime = FMath::Max(PatrolDelayTime, 0.0f);
+	MovementDelayOnHit = FMath::Max(MovementDelayOnHit, 0.0f);
+	OnHitTakenImpulse = FMath::Max(OnHitTakenImpulse, 0.0f);
 	ChaseAgroRadius = FMath::Max(ChaseAgroRadius, 0.0f);
 	ProjectileMaxDistance = FMath::Max(ProjectileMaxDistance, 0.0f);
 
@@ -298,25 +292,40 @@ void APlatformerEnemyBase::SetEnemyHitDelay(float InHitDelay)
 	ApplyEnemyRuntimeSettings();
 }
 
-void APlatformerEnemyBase::SetPatrolPoints(const TArray<FVector>& InPatrolPoints)
+void APlatformerEnemyBase::SetMovementDelayOnHit(float InMovementDelayOnHit)
 {
-	PatrolPoints = InPatrolPoints;
-	CurrentPatrolPointIndex = PatrolPoints.IsValidIndex(CurrentPatrolPointIndex) ? CurrentPatrolPointIndex : 0;
+	MovementDelayOnHit = FMath::Max(InMovementDelayOnHit, 0.0f);
+}
+
+void APlatformerEnemyBase::SetOnHitTakenImpulse(float InOnHitTakenImpulse)
+{
+	OnHitTakenImpulse = FMath::Max(InOnHitTakenImpulse, 0.0f);
+}
+
+void APlatformerEnemyBase::SetPatrolPoints(const TArray<FPlatformerPathPoint>& InPatrolPoints)
+{
+	if (PatrolPathComponent)
+	{
+		PatrolPathComponent->SetPathPoints(InPatrolPoints);
+	}
+
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	CurrentPatrolPointIndex = RuntimePatrolPoints.IsValidIndex(CurrentPatrolPointIndex) ? CurrentPatrolPointIndex : 0;
 	PatrolDirection = PatrolDirection == 0 ? 1 : PatrolDirection;
 	PatrolDelayRemaining = 0.0f;
 	PatrolSegmentStartPointIndex = INDEX_NONE;
 	bNeedsPatrolSegmentFacingUpdate = true;
+	bPatrolPathCompleted = false;
+}
+
+TArray<FPlatformerPathPoint> APlatformerEnemyBase::GetPatrolPoints() const
+{
+	return GetRuntimePatrolPoints();
 }
 
 void APlatformerEnemyBase::SetEnemyProjectileDistance(float InProjectileDistance)
 {
 	ProjectileMaxDistance = FMath::Max(InProjectileDistance, 0.0f);
-}
-
-void APlatformerEnemyBase::SetEnemyPatrolDelayTime(float InPatrolDelayTime)
-{
-	PatrolDelayTime = FMath::Max(InPatrolDelayTime, 0.0f);
-	PatrolDelayRemaining = FMath::Min(PatrolDelayRemaining, PatrolDelayTime);
 }
 
 void APlatformerEnemyBase::SetEnablePlayerChase(bool bInEnable)
@@ -341,7 +350,7 @@ bool APlatformerEnemyBase::TryAttackTarget(APlatformerCombatCharacterBase* Targe
 		return false;
 	}
 
-	if (!PerformAttack(TargetActor))
+	if (!StartAttackAnimation(TargetActor))
 	{
 		return false;
 	}
@@ -352,6 +361,26 @@ bool APlatformerEnemyBase::TryAttackTarget(APlatformerCombatCharacterBase* Targe
 	}
 
 	return true;
+}
+
+bool APlatformerEnemyBase::ApplyPendingAttackHit()
+{
+	if (bPendingAttackHitApplied)
+	{
+		return false;
+	}
+
+	APlatformerCombatCharacterBase* TargetActor = PendingAttackTarget.Get();
+	if (!TargetActor || !TargetActor->IsAlive() || !IsAlive())
+	{
+		ClearPendingAttack();
+		return false;
+	}
+
+	bPendingAttackHitApplied = true;
+	const bool bAppliedHit = ApplyAttackHit(TargetActor);
+	ClearPendingAttack();
+	return bAppliedHit;
 }
 
 void APlatformerEnemyBase::SetCombatTarget(APlatformerCombatCharacterBase* NewTarget)
@@ -375,6 +404,14 @@ void APlatformerEnemyBase::OnCombatDamageReceived(float DamageAmount, const FHit
 {
 	Super::OnCombatDamageReceived(DamageAmount, HitResult, DamageInstigatorActor);
 
+	if (!IsAlive())
+	{
+		return;
+	}
+
+	ApplyMovementDelayOnHit();
+	ApplyOnHitTakenImpulse(HitResult, DamageInstigatorActor);
+
 	if (APlatformerCombatCharacterBase* DamageInstigatorCharacter = Cast<APlatformerCombatCharacterBase>(DamageInstigatorActor))
 	{
 		SetCombatTarget(DamageInstigatorCharacter);
@@ -382,11 +419,9 @@ void APlatformerEnemyBase::OnCombatDamageReceived(float DamageAmount, const FHit
 
 	if (AbilitySystemComponent && DamageAmount >= StaggerThreshold)
 	{
-		FGameplayEventData EventData;
-		EventData.EventMagnitude = DamageAmount;
-		EventData.Instigator = DamageInstigatorActor;
-		EventData.Target = this;
-		AbilitySystemComponent->HandleGameplayEvent(PlatformerGameplayTags::Event_Combat_HitReceived, &EventData);
+		ClearPendingAttack();
+		PlayEnemyAnimationMontage(PlatformerEnemyAnimGameplayTags::Anim_Enemy_Combat_HitReaction);
+		BroadcastCombatHitReceivedEvent(DamageAmount, HitResult, DamageInstigatorActor);
 	}
 }
 
@@ -394,6 +429,7 @@ void APlatformerEnemyBase::OnCombatDeath(AActor* DamageInstigatorActor)
 {
 	Super::OnCombatDeath(DamageInstigatorActor);
 
+	ClearPendingAttack();
 	SetCombatTarget(nullptr);
 
 	if (StateTreeComponent)
@@ -406,9 +442,18 @@ void APlatformerEnemyBase::OnCombatDeath(AActor* DamageInstigatorActor)
 		PerceptionComponent->SetComponentTickEnabled(false);
 	}
 
+	const float DeathMontageDuration =
+		PlayEnemyAnimationMontage(PlatformerEnemyAnimGameplayTags::Anim_Enemy_Combat_Death);
 	if (HasAuthority())
 	{
-		Destroy();
+		if (DeathMontageDuration > 0.0f)
+		{
+			ScheduleEnemyDeathDestroy(DeathMontageDuration);
+		}
+		else
+		{
+			Destroy();
+		}
 	}
 }
 
@@ -460,6 +505,11 @@ bool APlatformerEnemyBase::CanAttackTarget(const APlatformerCombatCharacterBase*
 		return false;
 	}
 
+	if (IsEnemyAttackInProgress() || IsAttackAnimationPlaying(TargetActor))
+	{
+		return false;
+	}
+
 	if (GetCombatDistanceToTarget(TargetActor) > GetAttackRange())
 	{
 		return false;
@@ -477,9 +527,46 @@ bool APlatformerEnemyBase::CanAttackTarget(const APlatformerCombatCharacterBase*
 	return true;
 }
 
-bool APlatformerEnemyBase::PerformAttack(APlatformerCombatCharacterBase* TargetActor)
+bool APlatformerEnemyBase::StartAttackAnimation(APlatformerCombatCharacterBase* TargetActor)
+{
+	if (!TargetActor)
+	{
+		return false;
+	}
+
+	ClearPendingAttack();
+
+	PendingAttackTarget = TargetActor;
+	PendingAttackAnimationTag = GetAttackAnimationTagForTarget(TargetActor);
+	bPendingAttackHitApplied = false;
+
+	if (PlayAttackAnimationMontage(TargetActor))
+	{
+		SchedulePendingAttackHitFallback(TargetActor);
+		return true;
+	}
+
+	return ApplyPendingAttackHit();
+}
+
+bool APlatformerEnemyBase::ApplyAttackHit(APlatformerCombatCharacterBase* TargetActor)
 {
 	return false;
+}
+
+FGameplayTag APlatformerEnemyBase::GetAttackAnimationTagForTarget(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	return FGameplayTag();
+}
+
+float APlatformerEnemyBase::GetAttackAnimationPlayRate(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	return 1.0f;
+}
+
+float APlatformerEnemyBase::GetAttackHitFallbackDelay(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	return AttackHitFallbackDelay;
 }
 
 void APlatformerEnemyBase::ApplyArchetypeCombatData(const UPlatformerEnemyArchetypeAsset* Archetype)
@@ -503,6 +590,87 @@ float APlatformerEnemyBase::GetCombatDistanceToTarget(const APlatformerCombatCha
 	const FVector FlattenedSourceLocation(SourceLocation.X, 0.0f, SourceLocation.Z);
 	const FVector FlattenedTargetLocation(TargetLocation.X, 0.0f, TargetLocation.Z);
 	return FVector::Dist(FlattenedSourceLocation, FlattenedTargetLocation);
+}
+
+bool APlatformerEnemyBase::IsMovementDelayedByHit() const
+{
+	const UWorld* World = GetWorld();
+	return World && World->GetTimeSeconds() < HitMovementDelayEndTime;
+}
+
+void APlatformerEnemyBase::ApplyMovementDelayOnHit()
+{
+	if (MovementDelayOnHit <= 0.0f)
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		HitMovementDelayEndTime = World->GetTimeSeconds() + MovementDelayOnHit;
+	}
+
+	StopPatrolMovement(GetCharacterMovement());
+}
+
+void APlatformerEnemyBase::ApplyOnHitTakenImpulse(const FHitResult& HitResult, AActor* DamageInstigatorActor)
+{
+	if (OnHitTakenImpulse <= 0.0f)
+	{
+		return;
+	}
+
+	float ImpulseDirectionX = 0.0f;
+	if (DamageInstigatorActor && DamageInstigatorActor != this)
+	{
+		ImpulseDirectionX = FMath::Sign(GetActorLocation().X - DamageInstigatorActor->GetActorLocation().X);
+	}
+
+	if (FMath::IsNearlyZero(ImpulseDirectionX) && !HitResult.ImpactNormal.IsNearlyZero())
+	{
+		ImpulseDirectionX = FMath::Sign(HitResult.ImpactNormal.X);
+	}
+
+	if (FMath::IsNearlyZero(ImpulseDirectionX))
+	{
+		ImpulseDirectionX = -FMath::Sign(GetActorForwardVector().X);
+	}
+
+	if (FMath::IsNearlyZero(ImpulseDirectionX))
+	{
+		return;
+	}
+
+	LaunchCharacter(FVector(ImpulseDirectionX * OnHitTakenImpulse, 0.0f, 0.0f), true, false);
+}
+
+bool APlatformerEnemyBase::IsAttackAnimationPlaying(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	if (PendingAttackAnimationTag.IsValid() && IsAttackAnimationTagPlaying(PendingAttackAnimationTag))
+	{
+		return true;
+	}
+
+	return IsAttackAnimationTagPlaying(GetAttackAnimationTagForTarget(TargetActor));
+}
+
+bool APlatformerEnemyBase::IsAttackAnimationTagPlaying(const FGameplayTag& AnimTag) const
+{
+	if (!AnimTag.IsValid())
+	{
+		return false;
+	}
+
+	const USkeletalMeshComponent* MeshComponent = GetMesh();
+	UPlatformerEnemyAnimInstance* EnemyAnimInstance =
+		MeshComponent ? Cast<UPlatformerEnemyAnimInstance>(MeshComponent->GetAnimInstance()) : nullptr;
+	if (!EnemyAnimInstance)
+	{
+		return false;
+	}
+
+	UAnimMontage* AttackMontage = EnemyAnimInstance->ResolveEnemyMontage(AnimTag);
+	return AttackMontage && EnemyAnimInstance->Montage_IsPlaying(AttackMontage);
 }
 
 void APlatformerEnemyBase::RefreshEnemyCollisionIgnores()
@@ -541,12 +709,13 @@ void APlatformerEnemyBase::IgnoreCollisionWithEnemy(APlatformerEnemyBase* OtherE
 
 void APlatformerEnemyBase::UpdatePatrolMovement(float DeltaTime)
 {
-	if (!bEnableNativePatrol || PatrolPoints.Num() < 2 || !IsAlive() || DeltaTime <= 0.0f)
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	if (!bEnableNativePatrol || RuntimePatrolPoints.Num() < 2 || !IsAlive() || DeltaTime <= 0.0f)
 	{
 		return;
 	}
 
-	if (!PatrolPoints.IsValidIndex(CurrentPatrolPointIndex))
+	if (!RuntimePatrolPoints.IsValidIndex(CurrentPatrolPointIndex))
 	{
 		CurrentPatrolPointIndex = 0;
 	}
@@ -577,9 +746,15 @@ void APlatformerEnemyBase::UpdatePatrolMovement(float DeltaTime)
 		}
 	}
 
+	if (bPatrolPathCompleted)
+	{
+		StopPatrolMovement(MovementComponent);
+		return;
+	}
+
 	const float ResolvedAcceptanceRadius = FMath::Max(PatrolAcceptanceRadius, 0.0f);
 	FVector MovementDelta = FVector::ZeroVector;
-	for (int32 AttemptIndex = 0; AttemptIndex < PatrolPoints.Num(); ++AttemptIndex)
+	for (int32 AttemptIndex = 0; AttemptIndex < RuntimePatrolPoints.Num(); ++AttemptIndex)
 	{
 		const FVector ActorLocation = GetActorLocation();
 		const FVector TargetLocation = GetPatrolPointWorldLocation(CurrentPatrolPointIndex);
@@ -601,9 +776,10 @@ void APlatformerEnemyBase::UpdatePatrolMovement(float DeltaTime)
 
 		const int32 ReachedPatrolPointIndex = CurrentPatrolPointIndex;
 		AdvancePatrolTargetFromReachedPoint(ReachedPatrolPointIndex);
-		if (IsPatrolEndpoint(ReachedPatrolPointIndex) && PatrolDelayTime > 0.0f)
+		const float ReachedPointDelay = FMath::Max(RuntimePatrolPoints[ReachedPatrolPointIndex].PointDelay, 0.0f);
+		if (ReachedPointDelay > 0.0f)
 		{
-			PatrolDelayRemaining = PatrolDelayTime;
+			PatrolDelayRemaining = ReachedPointDelay;
 			StopPatrolMovement(MovementComponent);
 			return;
 		}
@@ -617,6 +793,10 @@ void APlatformerEnemyBase::UpdatePatrolMovement(float DeltaTime)
 
 	const FVector MovementDirection = MovementDelta.GetSafeNormal();
 	ApplyFacingForCurrentPatrolSegment();
+	const int32 SpeedPointIndex = RuntimePatrolPoints.IsValidIndex(PatrolSegmentStartPointIndex)
+		? PatrolSegmentStartPointIndex
+		: CurrentPatrolPointIndex;
+	MovementComponent->MaxWalkSpeed = MovementSpeed * FMath::Max(RuntimePatrolPoints[SpeedPointIndex].SpeedScale, 0.01f);
 	
 	// Используем AddMovementInput вместо прямого назначения Velocity,
 	// чтобы корректно работало ускорение и трение CharacterMovementComponent
@@ -640,6 +820,7 @@ void APlatformerEnemyBase::UpdateChaseMovement(float DeltaTime)
 	{
 		MovementComponent->SetMovementMode(MovementComponent->DefaultLandMovementMode);
 	}
+	MovementComponent->MaxWalkSpeed = MovementSpeed;
 
 	FVector TargetLocation = CurrentCombatTarget->GetActorLocation();
 	FVector ActorLocation = GetActorLocation();
@@ -655,8 +836,7 @@ void APlatformerEnemyBase::UpdateChaseMovement(float DeltaTime)
 		MovementDelta.Z = 0.0f;
 	}
 
-	// Останавливаемся, если подошли на дистанцию атаки
-	const float ResolvedAttackRange = FMath::Max(CombatAttackRange, 50.0f);
+	const float ResolvedAttackRange = FMath::Max(GetAttackRange(), 50.0f);
 	if (MovementDelta.SizeSquared() <= FMath::Square(ResolvedAttackRange * 0.8f))
 	{
 		StopPatrolMovement(MovementComponent);
@@ -671,12 +851,13 @@ void APlatformerEnemyBase::UpdateChaseMovement(float DeltaTime)
 
 FVector APlatformerEnemyBase::GetPatrolPointWorldLocation(int32 PatrolPointIndex) const
 {
-	if (!PatrolPoints.IsValidIndex(PatrolPointIndex))
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	if (!RuntimePatrolPoints.IsValidIndex(PatrolPointIndex))
 	{
 		return PatrolOriginLocation;
 	}
 
-	return PatrolOriginLocation + PatrolPoints[PatrolPointIndex];
+	return PatrolOriginLocation + RuntimePatrolPoints[PatrolPointIndex].PointLocation;
 }
 
 void APlatformerEnemyBase::AdvancePatrolTargetFromReachedPoint(int32 ReachedPatrolPointIndex)
@@ -684,7 +865,8 @@ void APlatformerEnemyBase::AdvancePatrolTargetFromReachedPoint(int32 ReachedPatr
 	PatrolSegmentStartPointIndex = ReachedPatrolPointIndex;
 	bNeedsPatrolSegmentFacingUpdate = true;
 
-	if (PatrolPoints.Num() < 2)
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	if (RuntimePatrolPoints.Num() < 2)
 	{
 		CurrentPatrolPointIndex = 0;
 		PatrolDirection = 1;
@@ -698,23 +880,29 @@ void APlatformerEnemyBase::AdvancePatrolTargetFromReachedPoint(int32 ReachedPatr
 		return;
 	}
 
-	const int32 LastPatrolPointIndex = PatrolPoints.Num() - 1;
+	const int32 LastPatrolPointIndex = RuntimePatrolPoints.Num() - 1;
 	if (ReachedPatrolPointIndex >= LastPatrolPointIndex)
 	{
-		PatrolDirection = -1;
-		CurrentPatrolPointIndex = LastPatrolPointIndex - 1;
+		if (PatrolPathComponent && PatrolPathComponent->ShouldRepeatPath())
+		{
+			PatrolDirection = 1;
+			CurrentPatrolPointIndex = 0;
+			return;
+		}
+
+		CurrentPatrolPointIndex = LastPatrolPointIndex;
+		bPatrolPathCompleted = true;
 		return;
 	}
 
-	CurrentPatrolPointIndex = FMath::Clamp(
-		ReachedPatrolPointIndex + PatrolDirection,
-		0,
-		LastPatrolPointIndex);
+	PatrolDirection = 1;
+	CurrentPatrolPointIndex = ReachedPatrolPointIndex + 1;
 }
 
 bool APlatformerEnemyBase::IsPatrolEndpoint(int32 PatrolPointIndex) const
 {
-	return PatrolPointIndex == 0 || PatrolPointIndex == PatrolPoints.Num() - 1;
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	return PatrolPointIndex == 0 || PatrolPointIndex == RuntimePatrolPoints.Num() - 1;
 }
 
 void APlatformerEnemyBase::StopPatrolMovement(UCharacterMovementComponent* MovementComponent) const
@@ -734,12 +922,13 @@ void APlatformerEnemyBase::StopPatrolMovement(UCharacterMovementComponent* Movem
 
 void APlatformerEnemyBase::ApplyFacingForCurrentPatrolSegment()
 {
-	if (!bNeedsPatrolSegmentFacingUpdate || !PatrolPoints.IsValidIndex(CurrentPatrolPointIndex))
+	const TArray<FPlatformerPathPoint>& RuntimePatrolPoints = GetRuntimePatrolPoints();
+	if (!bNeedsPatrolSegmentFacingUpdate || !RuntimePatrolPoints.IsValidIndex(CurrentPatrolPointIndex))
 	{
 		return;
 	}
 
-	const FVector SegmentStartLocation = PatrolPoints.IsValidIndex(PatrolSegmentStartPointIndex)
+	const FVector SegmentStartLocation = RuntimePatrolPoints.IsValidIndex(PatrolSegmentStartPointIndex)
 		? GetPatrolPointWorldLocation(PatrolSegmentStartPointIndex)
 		: GetActorLocation();
 	const FVector SegmentTargetLocation = GetPatrolPointWorldLocation(CurrentPatrolPointIndex);
@@ -772,77 +961,104 @@ void APlatformerEnemyBase::ApplyDefaultMeshFacing()
 	}
 }
 
-#if WITH_EDITORONLY_DATA
-void APlatformerEnemyBase::RefreshEditorPatrolPreviewComponents()
+void APlatformerEnemyBase::ClearPendingAttack()
 {
-	if (PatrolPathSpline)
+	if (UWorld* World = GetWorld())
 	{
-		PatrolPathSpline->SetClosedLoop(false);
-		PatrolPathSpline->SetSplinePoints(PatrolPoints, ESplineCoordinateSpace::Local, false);
-
-		for (int32 PointIndex = 0; PointIndex < PatrolPoints.Num(); ++PointIndex)
-		{
-			PatrolPathSpline->SetSplinePointType(PointIndex, ESplinePointType::Linear, false);
-		}
-
-		PatrolPathSpline->UpdateSpline();
+		World->GetTimerManager().ClearTimer(PendingAttackHitFallbackTimerHandle);
 	}
 
-	while (PatrolPointPreviewMeshes.Num() > PatrolPoints.Num())
-	{
-		if (UStaticMeshComponent* PreviewMesh = PatrolPointPreviewMeshes.Last())
-		{
-			PreviewMesh->DestroyComponent();
-		}
-
-		PatrolPointPreviewMeshes.RemoveAt(PatrolPointPreviewMeshes.Num() - 1);
-	}
-
-	for (int32 PointIndex = 0; PointIndex < PatrolPoints.Num(); ++PointIndex)
-	{
-		UStaticMeshComponent* PreviewMesh = PatrolPointPreviewMeshes.IsValidIndex(PointIndex)
-			? PatrolPointPreviewMeshes[PointIndex]
-			: nullptr;
-
-		if (!IsValid(PreviewMesh))
-		{
-			const FName ComponentName = MakeUniqueObjectName(
-				this,
-				UStaticMeshComponent::StaticClass(),
-				FName(TEXT("PatrolPointPreviewMesh")));
-
-			PreviewMesh = NewObject<UStaticMeshComponent>(this, ComponentName, RF_Transactional | RF_TextExportTransient);
-			PreviewMesh->CreationMethod = EComponentCreationMethod::UserConstructionScript;
-			PreviewMesh->SetupAttachment(RootComponent);
-			PreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			PreviewMesh->SetHiddenInGame(true);
-			PreviewMesh->SetIsVisualizationComponent(true);
-			PreviewMesh->bIsEditorOnly = true;
-			PreviewMesh->SetMobility(EComponentMobility::Movable);
-
-			if (PatrolPointPreviewMeshAsset)
-			{
-				PreviewMesh->SetStaticMesh(PatrolPointPreviewMeshAsset);
-			}
-
-			PreviewMesh->RegisterComponent();
-			if (PatrolPointPreviewMeshes.IsValidIndex(PointIndex))
-			{
-				PatrolPointPreviewMeshes[PointIndex] = PreviewMesh;
-			}
-			else
-			{
-				PatrolPointPreviewMeshes.Add(PreviewMesh);
-			}
-		}
-
-		PreviewMesh->SetRelativeLocation(PatrolPoints[PointIndex]);
-		PreviewMesh->SetRelativeRotation(FRotator::ZeroRotator);
-		PreviewMesh->SetRelativeScale3D(FVector(0.25f));
-		PreviewMesh->SetVisibility(true);
-	}
+	PendingAttackTarget = nullptr;
+	PendingAttackAnimationTag = FGameplayTag();
+	bPendingAttackHitApplied = false;
 }
-#endif
+
+bool APlatformerEnemyBase::PlayAttackAnimationMontage(APlatformerCombatCharacterBase* TargetActor)
+{
+	const FGameplayTag AttackAnimTag = PendingAttackAnimationTag.IsValid()
+		? PendingAttackAnimationTag
+		: GetAttackAnimationTagForTarget(TargetActor);
+	return PlayEnemyAnimationMontage(AttackAnimTag, GetAttackAnimationPlayRate(TargetActor)) > 0.0f;
+}
+
+float APlatformerEnemyBase::PlayEnemyAnimationMontage(const FGameplayTag& AnimTag, float PlayRate)
+{
+	if (!AnimTag.IsValid())
+	{
+		return 0.0f;
+	}
+
+	USkeletalMeshComponent* MeshComponent = GetMesh();
+	UPlatformerEnemyAnimInstance* EnemyAnimInstance =
+		MeshComponent ? Cast<UPlatformerEnemyAnimInstance>(MeshComponent->GetAnimInstance()) : nullptr;
+	if (!EnemyAnimInstance)
+	{
+		return 0.0f;
+	}
+
+	return EnemyAnimInstance->PlayEnemyMontage(AnimTag, PlayRate);
+}
+
+void APlatformerEnemyBase::SchedulePendingAttackHitFallback(APlatformerCombatCharacterBase* TargetActor)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const float FallbackDelay = GetAttackHitFallbackDelay(TargetActor);
+	if (FallbackDelay <= 0.0f)
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(
+		PendingAttackHitFallbackTimerHandle,
+		this,
+		&APlatformerEnemyBase::HandlePendingAttackHitFallback,
+		FallbackDelay,
+		false);
+}
+
+void APlatformerEnemyBase::HandlePendingAttackHitFallback()
+{
+	ApplyPendingAttackHit();
+}
+
+void APlatformerEnemyBase::ScheduleEnemyDeathDestroy(float DelaySeconds)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		Destroy();
+		return;
+	}
+
+	SetLifeSpan(0.0f);
+	World->GetTimerManager().SetTimer(
+		EnemyDeathDestroyTimerHandle,
+		this,
+		&APlatformerEnemyBase::HandleEnemyDeathDestroy,
+		FMath::Max(DelaySeconds, 0.01f),
+		false);
+}
+
+void APlatformerEnemyBase::HandleEnemyDeathDestroy()
+{
+	Destroy();
+}
+
+const TArray<FPlatformerPathPoint>& APlatformerEnemyBase::GetRuntimePatrolPoints() const
+{
+	if (PatrolPathComponent)
+	{
+		return PatrolPathComponent->GetPathPoints();
+	}
+
+	static const TArray<FPlatformerPathPoint> EmptyPathPoints;
+	return EmptyPathPoints;
+}
 
 void APlatformerEnemyBase::HandleTargetPerceptionUpdated(AActor* UpdatedActor, FAIStimulus Stimulus)
 {
@@ -859,7 +1075,8 @@ void APlatformerEnemyBase::HandleTargetPerceptionUpdated(AActor* UpdatedActor, F
 			SetCombatTarget(SensedCombatTarget);
 		}
 	}
-	else if (CurrentCombatTarget == SensedCombatTarget)
+	else if (CurrentCombatTarget == SensedCombatTarget
+		&& GetCombatDistanceToTarget(SensedCombatTarget) > CombatLoseTargetRange)
 	{
 		SetCombatTarget(nullptr);
 	}

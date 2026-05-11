@@ -1,6 +1,11 @@
+
 #include "Character/PlatformerCharacterBase.h"
 //
 #include "AbilitySystemComponent.h"
+#include "Animation/AnimMontage.h"
+#include "Animation/PlatformerAnimDataAsset.h"
+#include "Animation/PlatformerAnimGameplayTags.h"
+#include "Animation/PlatformerAnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Character/SideViewMovementComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -16,7 +21,9 @@
 #include "GAS/PlatformerAbilitySet.h"
 #include "GAS/PlatformerGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/DamageType.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Platformer/Environment/PlatformerLadder.h"
@@ -25,10 +32,8 @@
 #include "Traversal/PlatformerTraversalMovementComponent.h"
 #include "Traversal/PlatformerTraversalTypes.h"
 
-namespace PlatformerCharacterDebug
-{
-FString GetCustomMovementModeName(uint8 CustomMovementMode)
-{
+namespace PlatformerCharacterDebug {
+FString GetCustomMovementModeName(uint8 CustomMovementMode) {
   switch (static_cast<EPlatformerTraversalCustomMode>(CustomMovementMode)) {
   case EPlatformerTraversalCustomMode::LedgeHang:
     return TEXT("Custom:LedgeHang");
@@ -70,7 +75,9 @@ FString GetMovementModeName(const UCharacterMovementComponent *Movement) {
   }
 }
 
-const TCHAR *BoolName(bool bValue) { return bValue ? TEXT("true") : TEXT("false"); }
+const TCHAR *BoolName(bool bValue) {
+  return bValue ? TEXT("true") : TEXT("false");
+}
 } // namespace PlatformerCharacterDebug
 
 APlatformerCharacterBase::APlatformerCharacterBase(
@@ -187,6 +194,26 @@ void APlatformerCharacterBase::ApplyDeveloperSettingsSnapshot(
   }
 }
 
+void APlatformerCharacterBase::ApplyCameraRigSettings(
+    const FDeveloperPlatformerCameraSettings &CameraSettings) {
+  if (CameraBoom) {
+    CameraBoom->TargetArmLength = CameraSettings.DeveloperSpringArmArmLength;
+    CameraBoom->SetRelativeLocation(CameraSettings.DeveloperSpringArmLocation);
+    CameraBoom->SetRelativeRotation(
+        FRotator(CameraSettings.DeveloperSpringArmRotation.X,
+                 CameraSettings.DeveloperSpringArmRotation.Y,
+                 CameraSettings.DeveloperSpringArmRotation.Z));
+  }
+
+  if (FollowCamera) {
+    FollowCamera->SetRelativeLocation(CameraSettings.DeveloperCameraLocation);
+    FollowCamera->SetRelativeRotation(
+        FRotator(CameraSettings.DeveloperCameraRotation.X,
+                 CameraSettings.DeveloperCameraRotation.Y,
+                 CameraSettings.DeveloperCameraRotation.Z));
+  }
+}
+
 FDeveloperPlatformerCharacterSettings
 APlatformerCharacterBase::CaptureDeveloperCharacterSettings() const {
   FDeveloperPlatformerCharacterSettings DeveloperSettings;
@@ -195,6 +222,11 @@ APlatformerCharacterBase::CaptureDeveloperCharacterSettings() const {
       CaptureDeveloperCharacterMovementSettings();
   DeveloperSettings.DeveloperCombatSettings = CaptureDeveloperCombatSettings();
   return DeveloperSettings;
+}
+
+FDeveloperPlatformerCameraSettings
+APlatformerCharacterBase::CaptureCameraRigSettings() const {
+  return CaptureDeveloperCameraSettings();
 }
 
 FPlatformerDeveloperSettingsSnapshot
@@ -227,21 +259,19 @@ void APlatformerCharacterBase::PrintDeveloperCharacterState() const {
       FLinearColor::Yellow, 0.0f, GetFName());
 }
 
-FString APlatformerCharacterBase::GetDeveloperCharacterStateDebugString()
-    const {
+FString
+APlatformerCharacterBase::GetDeveloperCharacterStateDebugString() const {
   const UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
   const UPlatformerTraversalMovementComponent *TraversalMovementComponent =
       Cast<UPlatformerTraversalMovementComponent>(MovementComponent);
 
   const bool bIsDeadState =
-      AbilitySystemComponent &&
-      AbilitySystemComponent->HasMatchingGameplayTag(
-          PlatformerGameplayTags::State_Combat_Dead);
-  const bool bIsLedgeHanging =
-      TraversalMovementComponent &&
-      TraversalMovementComponent->IsHangingOnLedge();
-  const bool bIsLedgeClimbing =
-      TraversalMovementComponent && TraversalMovementComponent->IsClimbingLedge();
+      AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(
+                                    PlatformerGameplayTags::State_Combat_Dead);
+  const bool bIsLedgeHanging = TraversalMovementComponent &&
+                               TraversalMovementComponent->IsHangingOnLedge();
+  const bool bIsLedgeClimbing = TraversalMovementComponent &&
+                                TraversalMovementComponent->IsClimbingLedge();
   const bool bIsDashing =
       TraversalMovementComponent && TraversalMovementComponent->IsDashing();
   const bool bIsWallSliding =
@@ -254,16 +284,18 @@ FString APlatformerCharacterBase::GetDeveloperCharacterStateDebugString()
            PlatformerTraversalGameplayTags::State_Movement_WallJump));
   const bool bIsFalling =
       MovementComponent && MovementComponent->MovementMode == MOVE_Falling;
-  const bool bIsGrounded = MovementComponent && MovementComponent->IsMovingOnGround();
+  const bool bIsGrounded =
+      MovementComponent && MovementComponent->IsMovingOnGround();
   const FVector CurrentVelocity = GetVelocity();
   const float GroundSpeed =
       FVector(CurrentVelocity.X, CurrentVelocity.Y, 0.0f).Size();
   constexpr float GroundSpeedThreshold = 3.0f;
+  const bool bIsLadderActive = IsOnLadder();
 
   FString StateName = TEXT("Idle");
   if (bIsDeadState) {
     StateName = TEXT("Dead");
-  } else if (bIsOnLadder) {
+  } else if (bIsLadderActive) {
     StateName = TEXT("Ladder");
   } else if (bIsLedgeClimbing) {
     StateName = TEXT("LedgeGrabClimb");
@@ -278,8 +310,8 @@ FString APlatformerCharacterBase::GetDeveloperCharacterStateDebugString()
   } else if (bIsFalling) {
     StateName = CurrentVelocity.Z > 0.0f ? TEXT("Jump") : TEXT("Fall");
   } else if (bIsCrouched) {
-    StateName =
-        GroundSpeed > GroundSpeedThreshold ? TEXT("CrouchRun") : TEXT("CrouchIdle");
+    StateName = GroundSpeed > GroundSpeedThreshold ? TEXT("CrouchRun")
+                                                   : TEXT("CrouchIdle");
   } else if (bIsGrounded && GroundSpeed > GroundSpeedThreshold) {
     StateName = TEXT("Run");
   }
@@ -302,11 +334,12 @@ FString APlatformerCharacterBase::GetDeveloperCharacterStateDebugString()
            "Ladder=%s\nTraversal: LedgeHang=%s LedgeClimb=%s Dash=%s "
            "WallJump=%s WallSlide=%s AvailableLedges=%d\nVel=(X=%.1f Z=%.1f) "
            "GroundSpeed=%.1f Input=(X=%.2f Y=%.2f)"),
-      *StateName, *PlatformerCharacterDebug::GetMovementModeName(MovementComponent),
+      *StateName,
+      *PlatformerCharacterDebug::GetMovementModeName(MovementComponent),
       PlatformerCharacterDebug::BoolName(bIsFalling),
       PlatformerCharacterDebug::BoolName(bIsGrounded),
       PlatformerCharacterDebug::BoolName(bIsCrouched),
-      PlatformerCharacterDebug::BoolName(bIsOnLadder),
+      PlatformerCharacterDebug::BoolName(bIsLadderActive),
       PlatformerCharacterDebug::BoolName(bIsLedgeHanging),
       PlatformerCharacterDebug::BoolName(bIsLedgeClimbing),
       PlatformerCharacterDebug::BoolName(bIsDashing),
@@ -350,7 +383,18 @@ void APlatformerCharacterBase::NotifyLadderUnavailable(
   }
 
   if (ActiveLadder == Ladder) {
-    ExitActiveLadderToFalling(Ladder);
+    // Tick-order race-condition guard: TickLadderState checks position from
+    // the PREVIOUS frame. The CMC tick then moves the character by
+    // ClimbSpeed * dt (~5 cm at 60 fps), which can overshoot the trigger
+    // window and exit the ClimbVolume before the actor tick catches it.
+    // When that happens, arrive here while still climbing upward → finish
+    // the climb via the push-up mechanic instead of falling.
+    if (IsOnLadder() && LadderClimbInput > 0.0f) {
+      FinishLadderClimbAtTop(Ladder);
+      return;
+    }
+
+    SetLadderState(EPlatformerLadderState::None);
   }
 }
 
@@ -377,78 +421,124 @@ void APlatformerCharacterBase::NotifyLedgeGrabUnavailable(
       });
 }
 
+// =====================================================================================
+// Ladder FSM
+// =====================================================================================
+//
+// State graph (single source of truth: LadderState).
+//
+//   None --(EnterLadder ok)--> Mounting
+//   Mounting --(MountDuration elapsed)--> Climbing
+//   Climbing --(PerformLadderJump)--> JumpBoost
+//   Climbing --(PerformLadderCrouch)--> CrouchBoost
+//   JumpBoost --(JumpClimbDuration elapsed)--> Climbing
+//   CrouchBoost --(CrouchClimbDuration elapsed)--> Climbing
+//
+//   Climbing | JumpBoost --(reach top)--> TopFinish
+//   Climbing | CrouchBoost --(reach bottom)--> None (DismountFalling)
+//   Climbing --(horizontal exit input above threshold)--> None
+//   (DismountFalling) Any active state --(active ladder destroyed /
+//   unavailable)--> None (DismountFalling)
+//
+//   TopFinish --(TopFinishDuration elapsed)--> None
+//
+// IsOnLadder() returns true for {Mounting, Climbing, JumpBoost, CrouchBoost}.
+// IsLadderTopFinishActive() returns true only for TopFinish.
+//
+// Animation derivations (read by UPlatformerAnimInstance):
+//   bShouldLadderStart  iff state == Mounting
+//   bShouldLadderLoop   iff state in {Climbing, JumpBoost, CrouchBoost}
+//   bShouldLadderEnd    iff state == TopFinish
+//
+// Reentry cooldown: armed on every transition to None (any path). Blocks
+// TryEnterAvailableLadder until the active ladder's ReentryCooldownDuration
+// elapses, preventing the auto-mount loop right after a sideways/bottom
+// dismount.
+
+bool APlatformerCharacterBase::IsOnLadder() const {
+  switch (LadderState) {
+  case EPlatformerLadderState::Mounting:
+  case EPlatformerLadderState::Climbing:
+  case EPlatformerLadderState::JumpBoost:
+  case EPlatformerLadderState::CrouchBoost:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool APlatformerCharacterBase::IsLadderTopFinishActive() const {
+  return LadderState == EPlatformerLadderState::TopFinish;
+}
+
+bool APlatformerCharacterBase::ShouldPlayLadderStartAnimation() const {
+  return LadderState == EPlatformerLadderState::Mounting;
+}
+
+bool APlatformerCharacterBase::ShouldPlayLadderLoopAnimation() const {
+  return LadderState == EPlatformerLadderState::Climbing ||
+         LadderState == EPlatformerLadderState::JumpBoost ||
+         LadderState == EPlatformerLadderState::CrouchBoost;
+}
+
+bool APlatformerCharacterBase::ShouldPlayLadderEndAnimation() const {
+  return LadderState == EPlatformerLadderState::TopFinish;
+}
+
+float APlatformerCharacterBase::GetLadderClimbInput() const {
+  switch (LadderState) {
+  case EPlatformerLadderState::JumpBoost:
+    return 1.0f;
+  case EPlatformerLadderState::CrouchBoost:
+    return -1.0f;
+  case EPlatformerLadderState::Climbing:
+  case EPlatformerLadderState::Mounting:
+    return LadderClimbInput;
+  default:
+    return 0.0f;
+  }
+}
+
+void APlatformerCharacterBase::SetLadderClimbInput(float InClimbInput) {
+  LadderClimbInput = FMath::Clamp(InClimbInput, -1.0f, 1.0f);
+}
+
 bool APlatformerCharacterBase::EnterLadder(APlatformerLadder *Ladder) {
   if (!IsValid(Ladder)) {
     return false;
   }
 
-  if (bIsOnLadder && ActiveLadder == Ladder) {
+  // Already mounted on the same ladder — treat as success.
+  if (IsOnLadder() && ActiveLadder == Ladder) {
     return true;
+  }
+
+  // TopFinish is a hard lock; any re-entry must wait for it to expire.
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    return false;
   }
 
   if (AvailableLadder != Ladder) {
     return false;
   }
 
-  if (bIsOnLadder) {
-    ExitLadder();
+  // Switching ladders mid-climb: cleanly leave the previous one first.
+  if (IsOnLadder()) {
+    SetLadderState(EPlatformerLadderState::None);
   }
 
   if (bIsCrouched) {
     UnCrouch();
   }
 
-  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
-  if (!MovementComponent) {
-    return false;
-  }
-
-  const bool bEnteredFromAir = MovementComponent->IsFalling();
-
-  SavedPreLadderGravityScale = MovementComponent->GravityScale;
-  SavedPreLadderMovementMode = MovementComponent->MovementMode;
-
-  if (USideViewMovementComponent *SideViewMovementComponent =
-          Cast<USideViewMovementComponent>(MovementComponent)) {
-    bHadPreLadderGravityOverride =
-        SideViewMovementComponent->HasExternalGravityScaleOverride();
-    PreLadderGravityOverride =
-        SideViewMovementComponent->GetExternalGravityScaleOverride();
-    SideViewMovementComponent->SetExternalGravityScaleOverride(
-        Ladder->GetClimbGravityScale());
-  } else {
-    bHadPreLadderGravityOverride = false;
-    PreLadderGravityOverride = SavedPreLadderGravityScale;
-    MovementComponent->GravityScale = Ladder->GetClimbGravityScale();
-  }
-
-  if (Ladder->UsesFlyingMovementMode()) {
-    MovementComponent->SetMovementMode(MOVE_Flying);
-  }
-
   ActiveLadder = Ladder;
-  bIsOnLadder = true;
-  LadderClimbInput = 0.0f;
-  LadderJumpEndTime = -1.0f;
-  LadderCrouchEndTime = -1.0f;
+  SetLadderState(EPlatformerLadderState::Mounting);
 
-  FVector LadderVelocity = MovementComponent->Velocity;
-  LadderVelocity.X = 0.0f;
-  LadderVelocity.Y = 0.0f;
-  LadderVelocity.Z = 0.0f;
-  MovementComponent->Velocity = LadderVelocity;
-
-  if (AbilitySystemComponent) {
-    AbilitySystemComponent->AddLooseGameplayTag(
-        PlatformerGameplayTags::State_Movement_Ladder);
-  }
-
-  SnapCharacterToActiveLadder();
-
-  if (bEnteredFromAir) {
-    BeginLadderLoopAnimationState();
-  } else {
-    BeginLadderStartAnimationState();
+  if (LadderState != EPlatformerLadderState::Mounting) {
+    // SetLadderState rejected — Mount setup failed (e.g., no movement
+    // component).
+    ActiveLadder = nullptr;
+    return false;
   }
 
   OnEnteredLadder(Ladder);
@@ -456,7 +546,7 @@ bool APlatformerCharacterBase::EnterLadder(APlatformerLadder *Ladder) {
 }
 
 void APlatformerCharacterBase::ExitLadder(APlatformerLadder *Ladder) {
-  if (!bIsOnLadder) {
+  if (!IsOnLadder()) {
     return;
   }
 
@@ -464,65 +554,89 @@ void APlatformerCharacterBase::ExitLadder(APlatformerLadder *Ladder) {
     return;
   }
 
-  APlatformerLadder *ExitedLadder =
-      IsValid(ActiveLadder) ? ActiveLadder : nullptr;
+  // External request to leave — bypass TopFinish, drop straight to None.
+  SetLadderState(EPlatformerLadderState::None);
+}
 
-  if (UCharacterMovementComponent *MovementComponent = GetCharacterMovement()) {
-    if (USideViewMovementComponent *SideViewMovementComponent =
-            Cast<USideViewMovementComponent>(MovementComponent)) {
-      if (bHadPreLadderGravityOverride) {
-        SideViewMovementComponent->SetExternalGravityScaleOverride(
-            PreLadderGravityOverride);
-      } else {
-        SideViewMovementComponent->ClearExternalGravityScaleOverride();
-      }
-    } else {
-      MovementComponent->GravityScale = SavedPreLadderGravityScale;
-    }
-
-    MovementComponent->SetMovementMode(SavedPreLadderMovementMode);
+void APlatformerCharacterBase::FinishLadderClimbAtTop(
+    APlatformerLadder *Ladder) {
+  // Public entry point for "character reached the top of the ladder".
+  // All triggers (TopEntryVolume overlap, position check, tick overshoot)
+  // funnel through here. The actual work is done in SetLadderState(TopFinish):
+  //  - Snap to top surface
+  //  - Restore TopBlock collision (via HandleCharacterExitedAtTop)
+  //  - Start TopFinish timer → AnimBP plays AS_Platformer_Ladder_End
+  //  - Block input until timer expires
+  //  - Restore movement mode → MOVE_Walking when the timer expires
+  if (!IsValid(Ladder) || ActiveLadder != Ladder) {
+    return;
   }
-
-  if (AbilitySystemComponent) {
-    AbilitySystemComponent->RemoveLooseGameplayTag(
-        PlatformerGameplayTags::State_Movement_Ladder);
-  }
-
-  ActiveLadder = nullptr;
-  bIsOnLadder = false;
-  bHadPreLadderGravityOverride = false;
-  PreLadderGravityOverride = SavedPreLadderGravityScale;
-  LadderClimbInput = 0.0f;
-  LadderJumpEndTime = -1.0f;
-  LadderCrouchEndTime = -1.0f;
-
-  BeginLadderEndAnimationState();
-  OnExitedLadder(ExitedLadder);
+  SetLadderState(EPlatformerLadderState::TopFinish);
 }
 
 bool APlatformerCharacterBase::TryEnterAvailableLadder(
     float DesiredClimbInput) {
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    return false;
+  }
+
+  if (IsLadderReentryOnCooldown()) {
+    return false;
+  }
+
+  // Defense-in-depth: if some other code path bypassed HandleLadderClimbInput
+  // and called TryEnterAvailableLadder directly, still respect the release
+  // gate.
+  if (bRequiresLadderInputRelease) {
+    return false;
+  }
+
   if (!IsValid(AvailableLadder)) {
     AvailableLadder = nullptr;
     return false;
   }
 
-  if (!EnterLadder(AvailableLadder)) {
+  APlatformerLadder *LadderToEnter = AvailableLadder;
+  if (!LadderToEnter->CanCharacterEnterLadder(this, DesiredClimbInput)) {
     return false;
   }
 
+  if (!EnterLadder(LadderToEnter)) {
+    return false;
+  }
+
+  LadderToEnter->HandleCharacterEnteredLadder(this, DesiredClimbInput);
   SetLadderClimbInput(DesiredClimbInput);
   return true;
 }
 
 bool APlatformerCharacterBase::HandleLadderClimbInput(float InClimbInput,
                                                       float InputDeadZone) {
-  const float ResolvedDeadZone = FMath::Max(InputDeadZone, 0.0f);
-  const float ResolvedClimbInput =
-      FMath::Abs(InClimbInput) > ResolvedDeadZone ? InClimbInput : 0.0f;
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    // Even though input is ignored, drive the release gate so it clears
+    // when the player lets go during the lock window.
+    TickLadderInputReleaseGate(FMath::Abs(InClimbInput));
+    return true;
+  }
 
-  if (bIsOnLadder) {
+  const float ResolvedDeadZone = FMath::Max(InputDeadZone, 0.0f);
+  const float InputMagnitude = FMath::Abs(InClimbInput);
+  const float ResolvedClimbInput =
+      InputMagnitude > ResolvedDeadZone ? InClimbInput : 0.0f;
+
+  // Update the release gate every call so it clears as soon as the stick
+  // returns to neutral, regardless of which branch we take below.
+  TickLadderInputReleaseGate(InputMagnitude);
+
+  if (IsOnLadder()) {
     SetLadderClimbInput(ResolvedClimbInput);
+    return true;
+  }
+
+  // Gate is set after TopFinish or bottom dismount — block re-mount until
+  // the player releases the stick. Still report "consumed" so the caller
+  // doesn't accidentally route the input to walking/look.
+  if (bRequiresLadderInputRelease) {
     return true;
   }
 
@@ -535,109 +649,511 @@ bool APlatformerCharacterBase::HandleLadderClimbInput(float InClimbInput,
 
 bool APlatformerCharacterBase::HandleLadderHorizontalExitInput(
     float InHorizontalInput, float InputDeadZone) {
-  if (!bIsOnLadder) {
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    return true;
+  }
+
+  if (!IsOnLadder()) {
     return false;
   }
 
-  const float ResolvedDeadZone = FMath::Max(InputDeadZone, 0.0f);
-  if (FMath::Abs(InHorizontalInput) <= ResolvedDeadZone) {
+  // Per-ladder threshold takes precedence; falls back to caller dead zone.
+  // This avoids accidental sideways dismounts from analog stick noise.
+  float ExitThreshold = FMath::Max(InputDeadZone, 0.0f);
+  if (IsValid(ActiveLadder)) {
+    ExitThreshold = FMath::Max(ExitThreshold,
+                               ActiveLadder->GetHorizontalExitInputThreshold());
+  }
+
+  if (FMath::Abs(InHorizontalInput) <= ExitThreshold) {
     return false;
   }
 
   SetLadderClimbInput(0.0f);
-  ExitActiveLadderToFalling(ActiveLadder);
+  // Sideways exit always falls — feet are mid-ladder, no top surface to land
+  // on.
+  SetLadderState(EPlatformerLadderState::None);
   return true;
 }
 
-void APlatformerCharacterBase::SetLadderClimbInput(float InClimbInput) {
-  LadderClimbInput = FMath::Clamp(InClimbInput, -1.0f, 1.0f);
-}
-
 bool APlatformerCharacterBase::PerformLadderJump() {
-  if (!bIsOnLadder || !IsValid(ActiveLadder)) {
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    return true;
+  }
+
+  if (LadderState != EPlatformerLadderState::Climbing &&
+      LadderState != EPlatformerLadderState::CrouchBoost) {
     return false;
   }
 
-  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
-  if (!MovementComponent) {
+  if (!IsValid(ActiveLadder) || ActiveLadder->GetJumpClimbDuration() <= 0.0f ||
+      ActiveLadder->GetJumpClimbSpeed() <= 0.0f) {
     return false;
   }
 
-  const float JumpClimbDuration =
-      FMath::Max(ActiveLadder->GetJumpClimbDuration(), 0.0f);
-  const float JumpClimbSpeed =
-      FMath::Max(ActiveLadder->GetJumpClimbSpeed(), 0.0f);
-  if (JumpClimbDuration <= 0.0f || JumpClimbSpeed <= 0.0f) {
-    return false;
-  }
-
-  LadderJumpEndTime = GetWorldTimeSafe() + JumpClimbDuration;
-  LadderCrouchEndTime = -1.0f;
-
-  FVector LadderVelocity = MovementComponent->Velocity;
-  LadderVelocity.X = 0.0f;
-  LadderVelocity.Y = 0.0f;
-  LadderVelocity.Z = JumpClimbSpeed;
-  MovementComponent->Velocity = LadderVelocity;
+  SetLadderState(EPlatformerLadderState::JumpBoost);
   return true;
 }
 
 bool APlatformerCharacterBase::PerformLadderCrouch() {
-  if (!bIsOnLadder || !IsValid(ActiveLadder)) {
+  if (LadderState == EPlatformerLadderState::TopFinish) {
+    return true;
+  }
+
+  if (LadderState != EPlatformerLadderState::Climbing &&
+      LadderState != EPlatformerLadderState::JumpBoost) {
     return false;
   }
 
-  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
-  if (!MovementComponent) {
+  if (!IsValid(ActiveLadder) ||
+      ActiveLadder->GetCrouchClimbDuration() <= 0.0f ||
+      ActiveLadder->GetCrouchClimbSpeed() <= 0.0f) {
     return false;
   }
 
-  const float CrouchClimbDuration =
-      FMath::Max(ActiveLadder->GetJumpClimbDuration(), 0.0f);
-  const float CrouchClimbSpeed =
-      FMath::Max(ActiveLadder->GetJumpClimbSpeed(), 0.0f);
-  if (CrouchClimbDuration <= 0.0f || CrouchClimbSpeed <= 0.0f) {
-    return false;
-  }
-
-  LadderJumpEndTime = -1.0f;
-  LadderCrouchEndTime = GetWorldTimeSafe() + CrouchClimbDuration;
-
-  FVector LadderVelocity = MovementComponent->Velocity;
-  LadderVelocity.X = 0.0f;
-  LadderVelocity.Y = 0.0f;
-  LadderVelocity.Z = -CrouchClimbSpeed;
-  MovementComponent->Velocity = LadderVelocity;
+  SetLadderState(EPlatformerLadderState::CrouchBoost);
   return true;
 }
 
-bool APlatformerCharacterBase::ShouldPlayLadderStartAnimation() const {
-  return bShouldLadderStart;
-}
-
-bool APlatformerCharacterBase::ShouldPlayLadderLoopAnimation() const {
-  return bShouldLadderLoop;
-}
-
-bool APlatformerCharacterBase::ShouldPlayLadderEndAnimation() const {
-  return bShouldLadderEnd;
-}
-
-float APlatformerCharacterBase::GetLadderClimbInput() const {
-  if (!bIsOnLadder) {
-    return 0.0f;
+void APlatformerCharacterBase::SetLadderState(EPlatformerLadderState NewState) {
+  const EPlatformerLadderState OldState = LadderState;
+  if (OldState == NewState) {
+    return;
   }
 
-  const float CurrentTime = GetWorldTimeSafe();
-  if (LadderJumpEndTime > CurrentTime) {
-    return 1.0f;
+  // ---- Enter actions ----
+  switch (NewState) {
+  case EPlatformerLadderState::None: {
+    // Only restore movement if we actually held a ladder mount before this.
+    // TopFinish has already restored — see its enter case.
+    const bool bWasMounted = OldState == EPlatformerLadderState::Mounting ||
+                             OldState == EPlatformerLadderState::Climbing ||
+                             OldState == EPlatformerLadderState::JumpBoost ||
+                             OldState == EPlatformerLadderState::CrouchBoost;
+
+    APlatformerLadder *ExitedLadder =
+        IsValid(ActiveLadder) ? ActiveLadder.Get() : nullptr;
+
+    if (bWasMounted) {
+      // Notify the ladder before restoring movement so subclasses (e.g.
+      // LadderTop) can remove their blocking-collision bypass while the
+      // character is still in the ladder movement configuration.
+      if (ExitedLadder) {
+        ExitedLadder->OnCharacterDismountedBottom(this);
+      }
+
+      RestoreCharacterMovementFromLadder();
+
+      // Sideways / bottom dismount → switch to falling so the character drops
+      // naturally; jumping off via "Jump" key after Climbing also lands here.
+      if (UCharacterMovementComponent *MovementComponent =
+              GetCharacterMovement()) {
+        MovementComponent->SetMovementMode(MOVE_Falling);
+      }
+
+      if (AbilitySystemComponent) {
+        AbilitySystemComponent->RemoveLooseGameplayTag(
+            PlatformerGameplayTags::State_Movement_Ladder);
+      }
+    }
+
+    LadderState = EPlatformerLadderState::None;
+    LadderStateTimeRemaining = 0.0f;
+    LadderClimbInput = 0.0f;
+    ActiveLadder = nullptr;
+
+    if (bWasMounted) {
+      // TopFinish path already armed the cooldown and fired OnExitedLadder
+      // during its own enter; only the bottom/sideways path needs them here.
+      ArmLadderReentryCooldown();
+      OnExitedLadder(ExitedLadder);
+    }
+    return;
   }
 
-  if (LadderCrouchEndTime > CurrentTime) {
-    return -1.0f;
+  case EPlatformerLadderState::Mounting: {
+    if (!IsValid(ActiveLadder) || !GetCharacterMovement()) {
+      // Caller (EnterLadder) checks state to detect Mount setup failure.
+      return;
+    }
+
+    const bool bEnteredLadderFromAir = GetCharacterMovement()->IsFalling();
+
+    SaveCharacterMovementForLadder();
+
+    if (USideViewMovementComponent *SideViewMovementComponent =
+            Cast<USideViewMovementComponent>(GetCharacterMovement())) {
+      SideViewMovementComponent->SetExternalGravityScaleOverride(
+          ActiveLadder->GetClimbGravityScale());
+    } else {
+      GetCharacterMovement()->GravityScale =
+          ActiveLadder->GetClimbGravityScale();
+    }
+
+    if (ActiveLadder->UsesFlyingMovementMode()) {
+      GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+    }
+
+    // Decoupled MaxFlySpeed clamp: keeps ladder velocity from leaking
+    // into / from the character's general flying speed configuration.
+    GetCharacterMovement()->MaxFlySpeed =
+        FMath::Max(ActiveLadder->GetLadderMaxFlySpeed(), 1.0f);
+
+    // Freeze velocity at mount — start animation owns the entry frames.
+    GetCharacterMovement()->Velocity = FVector::ZeroVector;
+
+    if (AbilitySystemComponent) {
+      AbilitySystemComponent->AddLooseGameplayTag(
+          PlatformerGameplayTags::State_Movement_Ladder);
+    }
+
+    SnapCharacterToActiveLadder();
+
+    // Notify the ladder after the snap so subclasses (e.g. LadderTop) can
+    // disable their blocking geometry before the first climb tick.
+    ActiveLadder->OnCharacterMounted(this);
+
+    LadderState = EPlatformerLadderState::Mounting;
+    LadderStateTimeRemaining =
+        bEnteredLadderFromAir
+            ? 0.0f
+            : FMath::Max(ActiveLadder->GetMountDuration(), 0.0f);
+    LadderClimbInput = 0.0f;
+
+    // Mount duration of 0 → skip directly to Climbing. This is the default
+    // for air grabs so a falling/jumping character catches the ladder without
+    // waiting through a grounded start animation.
+    if (LadderStateTimeRemaining <= 0.0f) {
+      SetLadderState(EPlatformerLadderState::Climbing);
+    }
+    return;
   }
 
-  return LadderClimbInput;
+  case EPlatformerLadderState::Climbing:
+    LadderState = EPlatformerLadderState::Climbing;
+    LadderStateTimeRemaining = 0.0f;
+    return;
+
+  case EPlatformerLadderState::JumpBoost:
+    LadderState = EPlatformerLadderState::JumpBoost;
+    LadderStateTimeRemaining =
+        IsValid(ActiveLadder)
+            ? FMath::Max(ActiveLadder->GetJumpClimbDuration(), 0.0f)
+            : 0.0f;
+    return;
+
+  case EPlatformerLadderState::CrouchBoost:
+    LadderState = EPlatformerLadderState::CrouchBoost;
+    LadderStateTimeRemaining =
+        IsValid(ActiveLadder)
+            ? FMath::Max(ActiveLadder->GetCrouchClimbDuration(), 0.0f)
+            : 0.0f;
+    return;
+
+  case EPlatformerLadderState::TopFinish: {
+    APlatformerLadder *FinishedLadder =
+        IsValid(ActiveLadder) ? ActiveLadder.Get() : nullptr;
+    const float FinishDuration =
+        FinishedLadder
+            ? FMath::Max(FinishedLadder->GetTopFinishDuration(), 0.0f)
+            : 0.0f;
+
+    SnapCharacterToLadderTopSurface(FinishedLadder);
+
+    // Restore the TopBlock collision now so the surface is solid beneath the
+    // character before the animation plays.
+    if (FinishedLadder) {
+      FinishedLadder->HandleCharacterExitedAtTop(this);
+    }
+
+    // Keep MOVE_Flying with gravity=0 for the full TopFinish duration.
+    // Switching to MOVE_Walking here would cause the AnimBP to leave the ladder
+    // context immediately and skip the LedgeGrab_End animation.
+    // RestoreCharacterMovementFromLadder is deferred to TickLadderState when
+    // the timer expires (see TopFinish tick case below).
+    if (UCharacterMovementComponent *MovementComponent =
+            GetCharacterMovement()) {
+      MovementComponent->Velocity = FVector::ZeroVector;
+    }
+
+    if (AbilitySystemComponent) {
+      AbilitySystemComponent->RemoveLooseGameplayTag(
+          PlatformerGameplayTags::State_Movement_Ladder);
+    }
+
+    LadderState = EPlatformerLadderState::TopFinish;
+    LadderStateTimeRemaining = FinishDuration;
+    LadderClimbInput = 0.0f;
+
+    OnExitedLadder(FinishedLadder);
+
+    // Fire the cooldown now so the entire TopFinish + cooldown window blocks
+    // re-entry — without this, releasing TopFinish over the same volume
+    // would re-mount immediately.
+    ArmLadderReentryCooldown();
+
+    // Player is almost certainly still holding "up" when they reach the top.
+    // Force them to release before any further climb input is honored —
+    // otherwise the held input would re-mount the ladder right after
+    // TopFinish ends and fight the climb-end animation.
+    ArmLadderInputReleaseGate();
+
+    if (FinishDuration <= 0.0f) {
+      // Zero duration: no animation to wait for, restore movement immediately.
+      RestoreCharacterMovementFromLadder();
+      if (UCharacterMovementComponent *MovementComponent =
+              GetCharacterMovement()) {
+        MovementComponent->SetMovementMode(MOVE_Walking);
+        MovementComponent->Velocity = FVector::ZeroVector;
+      }
+      SetLadderState(EPlatformerLadderState::None);
+    }
+    return;
+  }
+  }
+}
+
+void APlatformerCharacterBase::TickLadderState(float DeltaTime) {
+  if (LadderState == EPlatformerLadderState::None) {
+    return;
+  }
+
+  // Active ladder vanished while mounted (level streaming, destruction) — bail
+  // out.
+  if (LadderState != EPlatformerLadderState::TopFinish &&
+      !IsValid(ActiveLadder)) {
+    SetLadderState(EPlatformerLadderState::None);
+    return;
+  }
+
+  const float ResolvedDeltaTime = FMath::Max(DeltaTime, 0.0f);
+  if (LadderStateTimeRemaining > 0.0f) {
+    LadderStateTimeRemaining =
+        FMath::Max(LadderStateTimeRemaining - ResolvedDeltaTime, 0.0f);
+  }
+
+  switch (LadderState) {
+  case EPlatformerLadderState::Mounting:
+    // Hold velocity at zero while the start animation plays.
+    if (UCharacterMovementComponent *MovementComponent =
+            GetCharacterMovement()) {
+      MovementComponent->Velocity = FVector::ZeroVector;
+    }
+    if (LadderStateTimeRemaining <= 0.0f) {
+      SetLadderState(EPlatformerLadderState::Climbing);
+    }
+    return;
+
+  case EPlatformerLadderState::Climbing: {
+    // Top exit triggers TopFinish; bottom exit drops to falling. Bottom check
+    // also includes "feet touching walkable floor" so a ladder embedded below
+    // ground level still releases when the character can't physically descend.
+    const bool bDrivingUp = LadderClimbInput > 0.0f;
+    const bool bDrivingDown = LadderClimbInput < 0.0f;
+    if (bDrivingUp && IsCharacterAtOrAboveLadderTop(ActiveLadder)) {
+      // Position-based safety net (primary trigger is TopEntryVolume overlap
+      // in APlatformerLadderTop::OnTopEntryVolumeBeginOverlap).
+      if (APlatformerLadder *ReachedLadder = ActiveLadder.Get()) {
+        FinishLadderClimbAtTop(ReachedLadder);
+      }
+      return;
+    }
+    if (bDrivingDown && (IsCharacterAtOrBelowLadderBottom(ActiveLadder) ||
+                         HasWalkableFloorClose(LadderBottomExitTolerance))) {
+      // Held-down auto-remount guard: even though we just dismount-fall, the
+      // player likely still holds down. Block re-entry until release.
+      ArmLadderInputReleaseGate();
+      SetLadderState(EPlatformerLadderState::None);
+      return;
+    }
+    ApplyLadderVelocity();
+    return;
+  }
+
+  case EPlatformerLadderState::JumpBoost:
+    if (IsCharacterAtOrAboveLadderTop(ActiveLadder)) {
+      if (APlatformerLadder *ReachedLadder = ActiveLadder.Get()) {
+        FinishLadderClimbAtTop(ReachedLadder);
+      }
+      return;
+    }
+    ApplyLadderVelocity();
+    if (LadderStateTimeRemaining <= 0.0f) {
+      SetLadderState(EPlatformerLadderState::Climbing);
+    }
+    return;
+
+  case EPlatformerLadderState::CrouchBoost:
+    if (IsCharacterAtOrBelowLadderBottom(ActiveLadder) ||
+        HasWalkableFloorClose(LadderBottomExitTolerance)) {
+      ArmLadderInputReleaseGate();
+      SetLadderState(EPlatformerLadderState::None);
+      return;
+    }
+    ApplyLadderVelocity();
+    if (LadderStateTimeRemaining <= 0.0f) {
+      SetLadderState(EPlatformerLadderState::Climbing);
+    }
+    return;
+
+  case EPlatformerLadderState::TopFinish:
+    if (UCharacterMovementComponent *MovementComponent =
+            GetCharacterMovement()) {
+      // Pin the character at the top surface while the end animation plays.
+      MovementComponent->Velocity = FVector::ZeroVector;
+    }
+    if (LadderStateTimeRemaining <= 0.0f) {
+      // Animation has finished. Now switch to MOVE_Walking so the character
+      // lands on the TopBlock surface. The TopBlock collision was already
+      // restored in HandleCharacterExitedAtTop (TopFinish entry), so
+      // FindFloor will detect the floor immediately.
+      RestoreCharacterMovementFromLadder();
+      if (UCharacterMovementComponent *MovementComponent =
+              GetCharacterMovement()) {
+        MovementComponent->SetMovementMode(MOVE_Walking);
+        MovementComponent->Velocity = FVector::ZeroVector;
+      }
+      SetLadderState(EPlatformerLadderState::None);
+    }
+    return;
+
+  default:
+    return;
+  }
+}
+
+void APlatformerCharacterBase::ApplyLadderVelocity() {
+  if (!IsValid(ActiveLadder)) {
+    return;
+  }
+  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
+  if (!MovementComponent) {
+    return;
+  }
+
+  float TargetZ = 0.0f;
+  switch (LadderState) {
+  case EPlatformerLadderState::Climbing:
+    TargetZ = LadderClimbInput * ActiveLadder->GetClimbSpeed();
+    break;
+  case EPlatformerLadderState::JumpBoost:
+    TargetZ = ActiveLadder->GetJumpClimbSpeed();
+    break;
+  case EPlatformerLadderState::CrouchBoost:
+    TargetZ = -ActiveLadder->GetCrouchClimbSpeed();
+    break;
+  default:
+    TargetZ = 0.0f;
+    break;
+  }
+
+  // Lock X/Y; only Z is driven. The character's plane constraint keeps Y
+  // locked, and zeroed X velocity keeps the body aligned with the snapped
+  // ladder X.
+  MovementComponent->Velocity = FVector(0.0f, 0.0f, TargetZ);
+}
+
+void APlatformerCharacterBase::SaveCharacterMovementForLadder() {
+  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
+  if (!MovementComponent) {
+    return;
+  }
+
+  SavedPreLadderMovementMode = MovementComponent->MovementMode;
+  SavedPreLadderGravityScale = MovementComponent->GravityScale;
+  SavedPreLadderMaxFlySpeed = MovementComponent->MaxFlySpeed;
+
+  if (USideViewMovementComponent *SideViewMovementComponent =
+          Cast<USideViewMovementComponent>(MovementComponent)) {
+    bHadPreLadderGravityOverride =
+        SideViewMovementComponent->HasExternalGravityScaleOverride();
+    PreLadderGravityOverride =
+        SideViewMovementComponent->GetExternalGravityScaleOverride();
+  } else {
+    bHadPreLadderGravityOverride = false;
+    PreLadderGravityOverride = SavedPreLadderGravityScale;
+  }
+}
+
+void APlatformerCharacterBase::RestoreCharacterMovementFromLadder() {
+  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
+  if (!MovementComponent) {
+    return;
+  }
+
+  if (USideViewMovementComponent *SideViewMovementComponent =
+          Cast<USideViewMovementComponent>(MovementComponent)) {
+    if (bHadPreLadderGravityOverride) {
+      SideViewMovementComponent->SetExternalGravityScaleOverride(
+          PreLadderGravityOverride);
+    } else {
+      SideViewMovementComponent->ClearExternalGravityScaleOverride();
+    }
+  } else {
+    MovementComponent->GravityScale = SavedPreLadderGravityScale;
+  }
+
+  MovementComponent->MaxFlySpeed = SavedPreLadderMaxFlySpeed;
+  MovementComponent->SetMovementMode(SavedPreLadderMovementMode);
+
+  bHadPreLadderGravityOverride = false;
+  PreLadderGravityOverride = SavedPreLadderGravityScale;
+}
+
+bool APlatformerCharacterBase::IsLadderReentryOnCooldown() const {
+  return LadderReentryCooldownEndTime > GetWorldTimeSafe();
+}
+
+void APlatformerCharacterBase::ArmLadderInputReleaseGate() {
+  bRequiresLadderInputRelease = true;
+}
+
+void APlatformerCharacterBase::TickLadderInputReleaseGate(
+    float CurrentInputMagnitude) {
+  if (!bRequiresLadderInputRelease) {
+    return;
+  }
+
+  // Player must let the stick / key fall back through neutral before climb
+  // input is honored again. Uses a tiny constant rather than the per-call
+  // dead-zone to avoid races where dead-zone tuning lets the stick "stay
+  // pressed" forever.
+  constexpr float NeutralReleaseThreshold = 0.05f;
+  if (CurrentInputMagnitude <= NeutralReleaseThreshold) {
+    bRequiresLadderInputRelease = false;
+  }
+}
+
+void APlatformerCharacterBase::ArmLadderReentryCooldown() {
+  // ActiveLadder may already be cleared in the None-enter path; use the
+  // current AvailableLadder as a fallback so we still get a sensible value.
+  const APlatformerLadder *CooldownLadder =
+      IsValid(ActiveLadder) ? ActiveLadder.Get() : AvailableLadder.Get();
+  const float CooldownDuration =
+      CooldownLadder
+          ? FMath::Max(CooldownLadder->GetReentryCooldownDuration(), 0.0f)
+          : 0.0f;
+  if (CooldownDuration > 0.0f) {
+    LadderReentryCooldownEndTime = GetWorldTimeSafe() + CooldownDuration;
+  } else {
+    LadderReentryCooldownEndTime = -1.0f;
+  }
+}
+
+void APlatformerCharacterBase::SnapCharacterToLadderTopSurface(
+    const APlatformerLadder *Ladder) {
+  if (!IsValid(Ladder)) {
+    return;
+  }
+
+  const float TargetFeetZ = Ladder->GetClimbTopWorldZ();
+  const float CurrentFeetZ = GetCharacterFeetWorldZ();
+  if (CurrentFeetZ < TargetFeetZ) {
+    FVector CharacterLocation = GetActorLocation();
+    CharacterLocation.Z += TargetFeetZ - CurrentFeetZ;
+    SetActorLocation(CharacterLocation, false, nullptr,
+                     ETeleportType::TeleportPhysics);
+  }
 }
 
 void APlatformerCharacterBase::GetAvailableLedgeGrabs(
@@ -676,27 +1192,20 @@ void APlatformerCharacterBase::BeginPlay() {
 void APlatformerCharacterBase::Tick(float DeltaTime) {
   Super::Tick(DeltaTime);
 
-  if (bIsOnLadder) {
-    if (!IsValid(ActiveLadder)) {
-      ExitActiveLadderToFalling();
-      UpdateLadderAnimationState(DeltaTime);
-      if (bPrintDeveloperCharacterStateEveryTick) {
-        PrintDeveloperCharacterState();
-      }
-      return;
-    }
-
-    UpdateActiveLadderMovement(DeltaTime);
-  } else if (AvailableLadder && !IsValid(AvailableLadder)) {
+  // Drop stale weak refs before the FSM consults them.
+  if (AvailableLadder && !IsValid(AvailableLadder)) {
     AvailableLadder = nullptr;
   }
+
+  // Single per-tick driver for the ladder state machine. Animation booleans
+  // are derived from LadderState directly (see ShouldPlay*Animation getters),
+  // so there is no separate animation tick.
+  TickLadderState(DeltaTime);
 
   AvailableLedgeGrabs.RemoveAll(
       [](const TWeakObjectPtr<APlatformerLedgeGrab> &AvailableLedgeGrab) {
         return !AvailableLedgeGrab.IsValid();
       });
-
-  UpdateLadderAnimationState(DeltaTime);
 
   if (bPrintDeveloperCharacterStateEveryTick) {
     PrintDeveloperCharacterState();
@@ -705,6 +1214,11 @@ void APlatformerCharacterBase::Tick(float DeltaTime) {
 
 void APlatformerCharacterBase::EndPlay(
     const EEndPlayReason::Type EndPlayReason) {
+  GetWorldTimerManager().ClearTimer(DeathSequenceTimerHandle);
+
+  if (LadderState != EPlatformerLadderState::None) {
+    SetLadderState(EPlatformerLadderState::None);
+  }
   DestroyDeveloperJumpTrajectoryActor();
   Super::EndPlay(EndPlayReason);
 }
@@ -724,11 +1238,17 @@ void APlatformerCharacterBase::FellOutOfWorld(const UDamageType &DamageType) {
 }
 
 void APlatformerCharacterBase::OnCombatDeath(AActor *DamageInstigatorActor) {
+  DisablePlayerInputForDeath();
+
   Super::OnCombatDeath(DamageInstigatorActor);
 
+  if (LadderState != EPlatformerLadderState::None) {
+    SetLadderState(EPlatformerLadderState::None);
+  }
+
   if (USkeletalMeshComponent *CharacterMesh = GetMesh()) {
-    CharacterMesh->SetHiddenInGame(true, true);
-    CharacterMesh->SetVisibility(false, true);
+    CharacterMesh->SetHiddenInGame(false, true);
+    CharacterMesh->SetVisibility(true, true);
   }
 
   if (UCapsuleComponent *CharacterCapsule = GetCapsuleComponent()) {
@@ -739,14 +1259,20 @@ void APlatformerCharacterBase::OnCombatDeath(AActor *DamageInstigatorActor) {
     HealthWidgetComponent->SetVisibility(false);
   }
 
-  if (APlatformerPlayerControllerBase *PlatformerPlayerController =
-          Cast<APlatformerPlayerControllerBase>(GetController())) {
-    PlatformerPlayerController->HandleControlledCharacterDeath();
-  }
+  StartCombatDeathSequence(DamageInstigatorActor);
 }
 
 void APlatformerCharacterBase::OnCombatRevived() {
+  GetWorldTimerManager().ClearTimer(DeathSequenceTimerHandle);
+  PendingDeathInstigatorActor.Reset();
+
   Super::OnCombatRevived();
+
+  if (APlayerController *PlayerController = Cast<APlayerController>(GetController())) {
+    EnableInput(PlayerController);
+    PlayerController->SetIgnoreMoveInput(false);
+    PlayerController->SetIgnoreLookInput(false);
+  }
 
   if (USkeletalMeshComponent *CharacterMesh = GetMesh()) {
     CharacterMesh->SetHiddenInGame(false, true);
@@ -762,49 +1288,95 @@ void APlatformerCharacterBase::OnCombatRevived() {
   }
 }
 
+void APlatformerCharacterBase::HandleCombatDeathAftermath(AActor *DamageInstigatorActor) {
+  PendingDeathInstigatorActor = DamageInstigatorActor;
+}
+
+void APlatformerCharacterBase::DisablePlayerInputForDeath() {
+  if (APlayerController *PlayerController = Cast<APlayerController>(GetController())) {
+    DisableInput(PlayerController);
+    PlayerController->SetIgnoreMoveInput(true);
+    PlayerController->SetIgnoreLookInput(true);
+  }
+}
+
+float APlatformerCharacterBase::PlayCombatDeathAnimation() {
+  constexpr float DefaultPlayRate = 1.0f;
+  const FGameplayTag DeathAnimTag = PlatformerAnimGameplayTags::Anim_Combat_Death;
+
+  if (USkeletalMeshComponent *CharacterMesh = GetMesh()) {
+    if (UPlatformerAnimInstance *PlatformerAnimInstance =
+            Cast<UPlatformerAnimInstance>(CharacterMesh->GetAnimInstance())) {
+      const float Duration = PlatformerAnimInstance->PlayAbilityMontage(DeathAnimTag, DefaultPlayRate);
+      if (Duration > 0.0f) {
+        UE_LOG(LogTemp, Log,
+               TEXT("PlayCombatDeathAnimation[%s]: tag '%s' played through PlatformerAnimInstance (duration=%.2fs)."),
+               *GetName(), *DeathAnimTag.ToString(), Duration);
+        return Duration;
+      }
+    }
+  }
+
+  if (AnimDataAsset) {
+    if (const FPlatformerAbilityAnimEntry *DeathAnimEntry = AnimDataAsset->FindAnimEntry(DeathAnimTag)) {
+      if (UAnimMontage *DeathMontage = DeathAnimEntry->Montage.Get()) {
+        const float PlayRate = FMath::Max(DeathAnimEntry->DefaultPlayRate, KINDA_SMALL_NUMBER);
+        const float Duration = PlayAnimMontage(DeathMontage, PlayRate);
+        UE_LOG(LogTemp, Log,
+               TEXT("PlayCombatDeathAnimation[%s]: tag '%s' -> montage '%s' (rate=%.2f, duration=%.2fs)."),
+               *GetName(), *DeathAnimTag.ToString(), *DeathMontage->GetName(), PlayRate, Duration);
+        return Duration;
+      }
+    }
+  }
+
+  UE_LOG(LogTemp, Warning,
+         TEXT("PlayCombatDeathAnimation[%s]: no montage resolved for tag '%s'. Check character AnimDataAsset or PlatformerAnimInstance.AnimData."),
+         *GetName(), *DeathAnimTag.ToString());
+  return 0.0f;
+}
+
+void APlatformerCharacterBase::StartCombatDeathSequence(AActor *DamageInstigatorActor) {
+  PendingDeathInstigatorActor = DamageInstigatorActor;
+  GetWorldTimerManager().ClearTimer(DeathSequenceTimerHandle);
+
+  const float AnimationDuration = PlayCombatDeathAnimation();
+  const float TotalDelay = FMath::Max(AnimationDuration, 0.0f)
+      + FMath::Max(DeathPostAnimationDelay, 0.0f);
+
+  if (TotalDelay <= 0.0f) {
+    FinishCombatDeathSequence();
+    return;
+  }
+
+  GetWorldTimerManager().SetTimer(
+      DeathSequenceTimerHandle,
+      this,
+      &APlatformerCharacterBase::FinishCombatDeathSequence,
+      TotalDelay,
+      false);
+}
+
+void APlatformerCharacterBase::FinishCombatDeathSequence() {
+  GetWorldTimerManager().ClearTimer(DeathSequenceTimerHandle);
+
+  BP_OnCombatDeath(PendingDeathInstigatorActor.Get());
+
+  if (APlatformerPlayerControllerBase *PlatformerPlayerController =
+          Cast<APlatformerPlayerControllerBase>(GetController())) {
+    PlatformerPlayerController->HandleControlledCharacterDeath();
+  }
+}
+
 void APlatformerCharacterBase::OnEnteredLadder(APlatformerLadder *Ladder) {}
 
 void APlatformerCharacterBase::OnExitedLadder(APlatformerLadder *Ladder) {}
 
-void APlatformerCharacterBase::UpdateActiveLadderMovement(float DeltaTime) {
-  if (!bIsOnLadder || !IsValid(ActiveLadder)) {
-    return;
-  }
-
-  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
-  if (!MovementComponent) {
-    return;
-  }
-
-  const float CurrentTime = GetWorldTimeSafe();
-  const bool bIsLadderCrouchActive = LadderCrouchEndTime > CurrentTime;
-  if ((LadderClimbInput < 0.0f || bIsLadderCrouchActive) &&
-      IsCharacterAtOrBelowLadderBottom(ActiveLadder)) {
-    ExitActiveLadderToFalling(ActiveLadder);
-    return;
-  }
-
-  SnapCharacterToActiveLadder();
-
-  FVector LadderVelocity = MovementComponent->Velocity;
-  LadderVelocity.X = 0.0f;
-  LadderVelocity.Y = 0.0f;
-
-  if (LadderJumpEndTime > CurrentTime) {
-    LadderVelocity.Z = ActiveLadder->GetJumpClimbSpeed();
-  } else if (bIsLadderCrouchActive) {
-    LadderVelocity.Z = -ActiveLadder->GetJumpClimbSpeed();
-  } else {
-    LadderJumpEndTime = -1.0f;
-    LadderCrouchEndTime = -1.0f;
-    LadderVelocity.Z = LadderClimbInput * ActiveLadder->GetClimbSpeed();
-  }
-
-  MovementComponent->Velocity = LadderVelocity;
-}
-
 void APlatformerCharacterBase::SnapCharacterToActiveLadder() {
-  if (!bIsOnLadder || !IsValid(ActiveLadder)) {
+  // Called from SetLadderState(Mounting) only — at this point ActiveLadder is
+  // set but LadderState may still be the previous value, so guard on the
+  // pointer alone.
+  if (!IsValid(ActiveLadder)) {
     return;
   }
 
@@ -822,27 +1394,12 @@ void APlatformerCharacterBase::SnapCharacterToActiveLadder() {
         ActiveLadder->GetActorQuat() *
         ActiveLadder->GetCharacterLadderRotation().Quaternion();
     SetActorLocationAndRotation(CharacterLocation, CharacterLadderRotation,
-                                false, nullptr,
-                                ETeleportType::TeleportPhysics);
+                                false, nullptr, ETeleportType::TeleportPhysics);
     return;
   }
 
   SetActorLocation(CharacterLocation, false, nullptr,
                    ETeleportType::TeleportPhysics);
-}
-
-void APlatformerCharacterBase::ExitActiveLadderToFalling(
-    APlatformerLadder *Ladder) {
-  if (!bIsOnLadder || (Ladder && ActiveLadder != Ladder)) {
-    return;
-  }
-
-  ExitLadder(Ladder);
-  ClearLadderAnimationState();
-
-  if (UCharacterMovementComponent *MovementComponent = GetCharacterMovement()) {
-    MovementComponent->SetMovementMode(MOVE_Falling);
-  }
 }
 
 bool APlatformerCharacterBase::IsCharacterAtOrBelowLadderBottom(
@@ -855,67 +1412,54 @@ bool APlatformerCharacterBase::IsCharacterAtOrBelowLadderBottom(
          Ladder->GetClimbBottomWorldZ() + LadderBottomExitTolerance;
 }
 
+bool APlatformerCharacterBase::HasWalkableFloorClose(float MaxDistance) const {
+  UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
+  if (!MovementComponent) {
+    return false;
+  }
+
+  // FindFloor sweeps a small distance below the capsule. Even in MOVE_Flying
+  // (used during climb) it returns a valid floor — we do not need to switch
+  // movement mode just to query.
+  FFindFloorResult FloorResult;
+  MovementComponent->FindFloor(GetActorLocation(), FloorResult, false);
+
+  if (!FloorResult.bWalkableFloor ||
+      FloorResult.FloorDist > FMath::Max(MaxDistance, 0.0f)) {
+    return false;
+  }
+
+  // Do not treat the active ladder actor itself as a "ground floor" exit
+  // trigger. When descending through a LadderTop actor the top block sits
+  // right at the character's feet (FloorDist ≈ 0), which would fire an
+  // immediate bottom dismount before the character has descended at all.
+  // FindFloor builds its own FCollisionQueryParams and ignores
+  // MoveIgnoreActors, so we must filter the result here instead.
+  if (IsValid(ActiveLadder) &&
+      FloorResult.HitResult.GetActor() == ActiveLadder.Get()) {
+    return false;
+  }
+
+  return true;
+}
+
+bool APlatformerCharacterBase::IsCharacterAtOrAboveLadderTop(
+    const APlatformerLadder *Ladder) const {
+  if (!IsValid(Ladder)) {
+    return false;
+  }
+
+  return GetCharacterFeetWorldZ() >=
+         Ladder->GetClimbTopWorldZ() - LadderBottomExitTolerance;
+}
+
 float APlatformerCharacterBase::GetCharacterFeetWorldZ() const {
   if (const UCapsuleComponent *CharacterCapsule = GetCapsuleComponent()) {
-    return GetActorLocation().Z - CharacterCapsule->GetScaledCapsuleHalfHeight();
+    return GetActorLocation().Z -
+           CharacterCapsule->GetScaledCapsuleHalfHeight();
   }
 
   return GetActorLocation().Z;
-}
-
-void APlatformerCharacterBase::UpdateLadderAnimationState(float DeltaTime) {
-  const float ResolvedDeltaTime = FMath::Max(DeltaTime, 0.0f);
-  LadderStartStateTimeRemaining =
-      FMath::Max(LadderStartStateTimeRemaining - ResolvedDeltaTime, 0.0f);
-  LadderEndStateTimeRemaining =
-      FMath::Max(LadderEndStateTimeRemaining - ResolvedDeltaTime, 0.0f);
-
-  const UCharacterMovementComponent *MovementComponent = GetCharacterMovement();
-  const bool bIsFalling = MovementComponent && MovementComponent->IsFalling();
-  if (bIsFalling) {
-    LadderEndStateTimeRemaining = 0.0f;
-  }
-
-  bShouldLadderStart = bIsOnLadder && LadderStartStateTimeRemaining > 0.0f;
-  bShouldLadderEnd =
-      !bIsOnLadder && !bIsFalling && LadderEndStateTimeRemaining > 0.0f;
-  bShouldLadderLoop = bIsOnLadder && !bShouldLadderStart;
-}
-
-void APlatformerCharacterBase::BeginLadderStartAnimationState() {
-  LadderStartStateTimeRemaining = FMath::Max(LadderStartStateDuration, 0.0f);
-  LadderEndStateTimeRemaining = 0.0f;
-
-  bShouldLadderStart = bIsOnLadder && LadderStartStateTimeRemaining > 0.0f;
-  bShouldLadderLoop = bIsOnLadder && !bShouldLadderStart;
-  bShouldLadderEnd = false;
-}
-
-void APlatformerCharacterBase::BeginLadderLoopAnimationState() {
-  LadderStartStateTimeRemaining = 0.0f;
-  LadderEndStateTimeRemaining = 0.0f;
-
-  bShouldLadderStart = false;
-  bShouldLadderLoop = bIsOnLadder;
-  bShouldLadderEnd = false;
-}
-
-void APlatformerCharacterBase::BeginLadderEndAnimationState() {
-  LadderStartStateTimeRemaining = 0.0f;
-  LadderEndStateTimeRemaining = FMath::Max(LadderEndStateDuration, 0.0f);
-
-  bShouldLadderStart = false;
-  bShouldLadderLoop = false;
-  bShouldLadderEnd = LadderEndStateTimeRemaining > 0.0f;
-}
-
-void APlatformerCharacterBase::ClearLadderAnimationState() {
-  LadderStartStateTimeRemaining = 0.0f;
-  LadderEndStateTimeRemaining = 0.0f;
-
-  bShouldLadderStart = false;
-  bShouldLadderLoop = false;
-  bShouldLadderEnd = false;
 }
 
 float APlatformerCharacterBase::GetWorldTimeSafe() const {

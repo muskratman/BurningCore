@@ -6,8 +6,12 @@
 #include "PaperTileMap/PaperTileMapLevelImporter.h"
 #include "PlatformerSettings/SPlatformerSettingsWidget.h"
 #include "PaperTileMap/SPaperTileMapImportWidget.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
 #include "Styling/AppStyle.h"
 #include "ToolMenus.h"
+#include "UnrealEdGlobals.h"
+#include "Editor/UnrealEdEngine.h"
+#include "Visualizers/PlatformerPathComponentVisualizer.h"
 #include "Widgets/Docking/SDockTab.h"
 
 #define LOCTEXT_NAMESPACE "FCookieBrosLevelEditorModule"
@@ -20,6 +24,8 @@ namespace
 
 void FCookieBrosLevelEditorModule::StartupModule()
 {
+	RegisterComponentVisualizers();
+
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
 		PaperTileMapImportTabName,
 		FOnSpawnTab::CreateRaw(this, &FCookieBrosLevelEditorModule::SpawnPaperTileMapImportTab))
@@ -46,6 +52,8 @@ void FCookieBrosLevelEditorModule::StartupModule()
 
 void FCookieBrosLevelEditorModule::ShutdownModule()
 {
+	UnregisterComponentVisualizers();
+
 	if (DeferredImportTickerHandle.IsValid())
 	{
 		FTSTicker::GetCoreTicker().RemoveTicker(DeferredImportTickerHandle);
@@ -60,6 +68,35 @@ void FCookieBrosLevelEditorModule::ShutdownModule()
 		FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PaperTileMapImportTabName);
 		FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(PlatformerSettingsTabName);
 	}
+}
+
+void FCookieBrosLevelEditorModule::RegisterComponentVisualizers()
+{
+	if (!GUnrealEd)
+	{
+		return;
+	}
+
+	const FName PathComponentClassName = UPlatformerPathComponent::StaticClass()->GetFName();
+	TSharedPtr<FComponentVisualizer> PathVisualizer = MakeShared<FPlatformerPathComponentVisualizer>();
+	GUnrealEd->RegisterComponentVisualizer(PathComponentClassName, PathVisualizer);
+	PathVisualizer->OnRegister();
+	RegisteredComponentVisualizerNames.Add(PathComponentClassName);
+}
+
+void FCookieBrosLevelEditorModule::UnregisterComponentVisualizers()
+{
+	if (!GUnrealEd)
+	{
+		RegisteredComponentVisualizerNames.Reset();
+		return;
+	}
+
+	for (const FName ComponentClassName : RegisteredComponentVisualizerNames)
+	{
+		GUnrealEd->UnregisterComponentVisualizer(ComponentClassName);
+	}
+	RegisteredComponentVisualizerNames.Reset();
 }
 
 void FCookieBrosLevelEditorModule::RegisterMenus()

@@ -1,7 +1,9 @@
 #include "PlatformerSettings/SPlatformerSettingsWidget.h"
 
 #include "AI/PlatformerEnemyBase.h"
+#include "AI/PlatformerEnemyElite.h"
 #include "AI/PlatformerEnemyRanged.h"
+#include "Platformer/Environment/PlatformerCameraVolume.h"
 #include "Platformer/Environment/PlatformerConveyor.h"
 #include "Platformer/Environment/PlatformerDangerBlock.h"
 #include "Platformer/Environment/PlatformerDestructibleBlock.h"
@@ -16,6 +18,7 @@
 #include "Platformer/Environment/PlatformerSwitch.h"
 #include "Platformer/Environment/PlatformerTeleporter.h"
 #include "Platformer/Environment/PlatformerTriggeredLift.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
 #include "Platformer/Environment/PlatformerVanishingBlock.h"
 #include "Platformer/Environment/PlatformerWallTurret.h"
 #include "Platformer/Environment/PlatformerYokuBlocks.h"
@@ -74,6 +77,7 @@ void SPlatformerSettingsWidget::Construct(const FArguments& InArgs)
 
 	USelection::SelectionChangedEvent.AddSP(this, &SPlatformerSettingsWidget::HandleEditorSelectionChanged);
 	USelection::SelectObjectEvent.AddSP(this, &SPlatformerSettingsWidget::HandleEditorSelectionChanged);
+	FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(this, &SPlatformerSettingsWidget::HandleObjectPropertyChanged);
 
 	RefreshFromSelection();
 }
@@ -82,6 +86,7 @@ SPlatformerSettingsWidget::~SPlatformerSettingsWidget()
 {
 	USelection::SelectionChangedEvent.RemoveAll(this);
 	USelection::SelectObjectEvent.RemoveAll(this);
+	FCoreUObjectDelegates::OnObjectPropertyChanged.RemoveAll(this);
 }
 
 void SPlatformerSettingsWidget::HandleEditorSelectionChanged(UObject* ChangedObject)
@@ -99,6 +104,24 @@ void SPlatformerSettingsWidget::HandleSettingsFinishedChanging(const FPropertyCh
 	const FScopedTransaction Transaction(LOCTEXT("UpdatePlatformerSettingsTransaction", "Update Platformer Settings"));
 	ActiveSettingsObject->PushToActor();
 	RefreshFromSelection();
+}
+
+void SPlatformerSettingsWidget::HandleObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& PropertyChangedEvent)
+{
+	if (!ActiveSettingsObject.IsValid() || !DetailsView.IsValid())
+	{
+		return;
+	}
+
+	const UPlatformerPathComponent* ChangedPathComponent = Cast<UPlatformerPathComponent>(Object);
+	AActor* EditedActor = ActiveSettingsObject->GetEditedActor();
+	if (!ChangedPathComponent || !EditedActor || ChangedPathComponent->GetOwner() != EditedActor)
+	{
+		return;
+	}
+
+	ActiveSettingsObject->PullFromActor(EditedActor);
+	DetailsView->ForceRefresh();
 }
 
 void SPlatformerSettingsWidget::RefreshFromSelection()
@@ -158,6 +181,11 @@ UPlatformerActorSettingsObject* SPlatformerSettingsWidget::CreateSettingsObjectF
 		return nullptr;
 	}
 
+	if (Actor->IsA<APlatformerEnemyElite>())
+	{
+		return NewObject<UPlatformerEliteEnemySettingsObject>(GetTransientPackage());
+	}
+
 	if (Actor->IsA<APlatformerEnemyRanged>())
 	{
 		return NewObject<UPlatformerRangedEnemySettingsObject>(GetTransientPackage());
@@ -166,6 +194,11 @@ UPlatformerActorSettingsObject* SPlatformerSettingsWidget::CreateSettingsObjectF
 	if (Actor->IsA<APlatformerEnemyBase>())
 	{
 		return NewObject<UPlatformerEnemySettingsObject>(GetTransientPackage());
+	}
+
+	if (Actor->IsA<APlatformerCameraVolume>())
+	{
+		return NewObject<UPlatformerCameraVolumeSettingsObject>(GetTransientPackage());
 	}
 
 	if (Actor->IsA<APlatformerTriggeredLift>())

@@ -42,6 +42,9 @@ public:
   bool RequestCharacterDropThrough(ACharacter *Character);
 
   UFUNCTION(BlueprintCallable, Category = "Drop Through Platform|Collision")
+  void RestoreCharacterCollision(ACharacter *Character);
+
+  UFUNCTION(BlueprintCallable, Category = "Drop Through Platform|Collision")
   void SetDropThroughEnabled(bool bInDropThroughEnabled);
 
   FORCEINLINE bool IsDropThroughEnabled() const {
@@ -128,4 +131,3 @@ private:
   void SetCharacterIgnoreComponentWhenMoving(ACharacter *Character,
                                              bool bShouldIgnore);
 };
-

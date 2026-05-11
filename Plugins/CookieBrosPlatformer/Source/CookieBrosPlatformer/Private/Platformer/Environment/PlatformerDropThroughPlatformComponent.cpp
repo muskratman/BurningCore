@@ -120,6 +120,17 @@ bool UPlatformerDropThroughPlatformComponent::RequestCharacterDropThrough(
   return true;
 }
 
+void UPlatformerDropThroughPlatformComponent::RestoreCharacterCollision(
+    ACharacter *Character) {
+  if (!Character) {
+    return;
+  }
+
+  CharactersAbovePlatform.Remove(Character);
+  CharactersBelowPlatform.Remove(Character);
+  SetCharacterIgnoreComponentWhenMoving(Character, false);
+}
+
 void UPlatformerDropThroughPlatformComponent::SetDropThroughEnabled(
     bool bInDropThroughEnabled) {
   if (bDropThroughEnabled && !bInDropThroughEnabled) {
@@ -263,4 +274,3 @@ void UPlatformerDropThroughPlatformComponent::
                                                       bShouldIgnore);
   }
 }
-

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Platformer/Systems/PlatformerCheckpointActor.h"
+#include "Platformer/Environment/PlatformerCheckpoint.h"
 #include "CheckpointActor.generated.h"
 
 class UNiagaraComponent;
@@ -11,7 +11,7 @@ class UNiagaraComponent;
  * Shrine that the player interacts with to save progress and respawn.
  */
 UCLASS()
-class DRAGONSLAYER_API ACheckpointActor : public APlatformerCheckpointActor
+class DRAGONSLAYER_API ACheckpointActor : public APlatformerCheckpoint
 {
 	GENERATED_BODY()
 	

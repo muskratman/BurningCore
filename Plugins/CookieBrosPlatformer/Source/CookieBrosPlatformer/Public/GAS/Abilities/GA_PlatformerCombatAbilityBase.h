@@ -3,9 +3,14 @@
 #include "CoreMinimal.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayTagContainer.h"
+#include "Logging/LogMacros.h"
 #include "Projectiles/Combat/CombatProjectile.h"
 #include "Abilities/GameplayAbility.h"
 #include "GA_PlatformerCombatAbilityBase.generated.h"
+
+// Shared log category for combat-ability diagnostics (animation resolution,
+// projectile spawn failures, etc). Defined in GA_PlatformerCombatAbilityBase.cpp.
+COOKIEBROSPLATFORMER_API DECLARE_LOG_CATEGORY_EXTERN(LogPlatformerCombatAbility, Log, All);
 
 class APlatformerCombatCharacterBase;
 class APlatformerCharacterBase;
@@ -92,8 +97,20 @@ protected:
 	UPlatformerAnimInstance* GetPlatformerAnimInstance(const FGameplayAbilityActorInfo* ActorInfo) const;
 
 	/**
+	 * Resolve a montage for AnimTag with fallbacks, without playing it.
+	 * Priority:
+	 *   1. UPlatformerAnimInstance::AnimData (when AnimBP inherits the platformer base).
+	 *   2. APlatformerCharacterBase::AnimDataAsset (works for any AnimBP class).
+	 *   3. Caller-supplied FallbackMontage.
+	 */
+	UAnimMontage* ResolveAbilityMontage(
+		const FGameplayAbilityActorInfo* ActorInfo,
+		const FGameplayTag& AnimTag,
+		UAnimMontage* FallbackMontage = nullptr) const;
+
+	/**
 	 * Play a montage via data-driven lookup.
-	 * Priority: AnimDataAsset (by AnimTag) → FallbackMontage.
+	 * Logs a warning when the tag cannot be resolved through any path.
 	 * @return Duration of the played montage, or 0 if nothing was played.
 	 */
 	float PlayAbilityAnimation(

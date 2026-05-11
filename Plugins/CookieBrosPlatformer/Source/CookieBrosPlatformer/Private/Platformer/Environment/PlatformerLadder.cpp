@@ -60,6 +60,27 @@ void APlatformerLadder::SetSnapCharacterDepthToLadder(bool bInSnapCharacterDepth
 	bSnapCharacterDepthToLadder = bInSnapCharacterDepthToLadder;
 }
 
+bool APlatformerLadder::CanCharacterEnterLadder(const APlatformerCharacterBase* Character, float DesiredClimbInput) const
+{
+	return IsValid(Character);
+}
+
+void APlatformerLadder::HandleCharacterEnteredLadder(APlatformerCharacterBase* Character, float DesiredClimbInput)
+{
+}
+
+void APlatformerLadder::HandleCharacterExitedAtTop(APlatformerCharacterBase* Character)
+{
+}
+
+void APlatformerLadder::OnCharacterMounted(APlatformerCharacterBase* Character)
+{
+}
+
+void APlatformerLadder::OnCharacterDismountedBottom(APlatformerCharacterBase* Character)
+{
+}
+
 float APlatformerLadder::GetClimbBottomWorldZ() const
 {
 	return ClimbVolume ? ClimbVolume->Bounds.GetBox().Min.Z : GetActorLocation().Z;

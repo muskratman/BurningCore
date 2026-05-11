@@ -1,6 +1,5 @@
 #include "Platformer/Environment/PlatformerTriggeredLift.h"
 
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Character.h"
@@ -24,7 +23,10 @@ APlatformerTriggeredLift::APlatformerTriggeredLift()
 	TriggerVolume->OnComponentBeginOverlap.AddDynamic(this, &APlatformerTriggeredLift::OnTriggerBeginOverlap);
 	TriggerVolume->OnComponentEndOverlap.AddDynamic(this, &APlatformerTriggeredLift::OnTriggerEndOverlap);
 
-	PointBBaseRelativeLocation = FVector(0.0f, 0.0f, 500.0f);
+	SetMovementPathPoints({
+		FPlatformerPathPoint(FVector::ZeroVector),
+		FPlatformerPathPoint(FVector(0.0f, 0.0f, 500.0f))
+	});
 	bAutoStart = false;
 }
 

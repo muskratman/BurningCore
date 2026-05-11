@@ -3,6 +3,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/PlatformerAnimDataAsset.h"
 #include "Animation/PlatformerAnimGameplayTags.h"
+#include "Animation/PlatformerLocomotionAnimSet.h"
 #include "Character/PlatformerCharacterBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GAS/PlatformerGameplayTags.h"
@@ -54,10 +55,12 @@ void UPlatformerAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	}
 
 	UpdateMovementProperties(DeltaSeconds);
+	UpdateLookProperties();
 	UpdateGameplayTagProperties();
 	UpdateDashStateProperties(DeltaSeconds);
 	UpdateLadderStateProperties();
 	UpdateLedgeGrabStateProperties(DeltaSeconds);
+	UpdateLandingStateProperties(DeltaSeconds);
 	UpdateAbilityMontageProperties();
 	UpdateDerivedStateProperties();
 }
@@ -87,6 +90,7 @@ void UPlatformerAnimInstance::UpdateMovementProperties(float DeltaSeconds)
 	bIsCrouching = CachedCharacter->bIsCrouched;
 	bIsOnLadder = CachedCharacter->IsOnLadder();
 	LadderClimbInput = CachedCharacter->GetLadderClimbInput();
+	LadderSpeed = bIsOnLadder ? FMath::Abs(Velocity.Z) : 0.0f;
 
 	if (!FMath::IsNearlyZero(Velocity.X))
 	{
@@ -139,6 +143,7 @@ void UPlatformerAnimInstance::UpdateDerivedStateProperties()
 		bIsLedgeHanging || bIsLedgeClimbing || bShouldLedgeGrabStart || bShouldLedgeGrabLoop || bShouldLedgeGrabEnd;
 	const bool bCanUseGroundLocomotion =
 		!bIsInAir
+		&& !bShouldLand
 		&& !bIsLadderAnimationStateActive
 		&& !bIsLedgeGrabAnimationStateActive
 		&& !bIsDead
@@ -306,6 +311,62 @@ void UPlatformerAnimInstance::UpdateLedgeGrabStateProperties(float DeltaSeconds)
 	PreviousFrameVerticalVelocity = VerticalVelocity;
 }
 
+void UPlatformerAnimInstance::UpdateLandingStateProperties(float DeltaSeconds)
+{
+	// Land state only makes sense when the LocomotionAnimSet provides a
+	// LandSequence. Null sequence = feature disabled; skip to avoid
+	// suppressing idle/run unnecessarily.
+	const bool bHasLandSequence = LocomotionAnimSet && LocomotionAnimSet->LandSequence;
+
+	if (!bHasLandSequence || bIsDead)
+	{
+		LandStateTimeRemaining = 0.0f;
+		bShouldLand = false;
+		bWasInAirLastFrame = bIsInAir;
+		return;
+	}
+
+	// Detect air→ground transition. Suppress when ladder or ledge-climb end
+	// states are active — they own the exit animation for those cases.
+	const bool bLadderOrLedgeExit = bShouldLadderEnd || bShouldLedgeGrabEnd || bIsOnLadder;
+	const bool bJustLanded = bWasInAirLastFrame && !bIsInAir && !bLadderOrLedgeExit;
+
+	if (bJustLanded)
+	{
+		LandStateTimeRemaining = FMath::Max(LandStateDuration, 0.0f);
+	}
+	else if (bIsInAir || bLadderOrLedgeExit)
+	{
+		// Abort any active land state if we went back to air or a traversal
+		// system took over (e.g. double-jump during landing recovery).
+		LandStateTimeRemaining = 0.0f;
+	}
+	else
+	{
+		LandStateTimeRemaining = FMath::Max(LandStateTimeRemaining - DeltaSeconds, 0.0f);
+	}
+
+	bShouldLand = LandStateTimeRemaining > 0.0f;
+	bWasInAirLastFrame = bIsInAir;
+}
+
+void UPlatformerAnimInstance::UpdateLookProperties()
+{
+	if (!CachedCharacter)
+	{
+		LookYaw = 0.0f;
+		LookPitch = 0.0f;
+		return;
+	}
+
+	const FRotator ControlRotation = CachedCharacter->GetControlRotation();
+	const FRotator ActorRotation = CachedCharacter->GetActorRotation();
+	const FRotator Delta = (ControlRotation - ActorRotation).GetNormalized();
+
+	LookYaw = FMath::ClampAngle(Delta.Yaw, -90.0f, 90.0f);
+	LookPitch = FMath::ClampAngle(Delta.Pitch, -90.0f, 90.0f);
+}
+
 void UPlatformerAnimInstance::UpdateAbilityMontageProperties()
 {
 	bIsMeleeAttacking = IsAbilityMontagePlaying(PlatformerAnimGameplayTags::Anim_Combat_MeleeHit);
@@ -313,6 +374,7 @@ void UPlatformerAnimInstance::UpdateAbilityMontageProperties()
 	bIsMeleeCharging = IsAbilityMontagePlaying(PlatformerAnimGameplayTags::Anim_Combat_MeleeChargeLoop);
 	bIsRangedCharging = IsAbilityMontagePlaying(PlatformerAnimGameplayTags::Anim_Combat_RangedChargeLoop);
 	bIsHitReacting = IsAbilityMontagePlaying(PlatformerAnimGameplayTags::Anim_Combat_HitReaction);
+	bIsDeathAnimating = IsAbilityMontagePlaying(PlatformerAnimGameplayTags::Anim_Combat_Death);
 	bIsPlayingAbilityMontage = IsAnyAbilityMontagePlaying();
 }
 
@@ -386,8 +448,46 @@ void UPlatformerAnimInstance::CacheAnimDataFromCharacter()
 {
 	bCachedDataInitialized = true;
 
-	if (!AnimData && CachedCharacter)
+	if (!CachedCharacter)
+	{
+		return;
+	}
+
+	if (!AnimData)
 	{
 		AnimData = CachedCharacter->GetAnimDataAsset();
+	}
+
+	if (!LocomotionAnimSet)
+	{
+		LocomotionAnimSet = CachedCharacter->GetLocomotionAnimSet();
+	}
+
+	if (LocomotionAnimSet)
+	{
+		CachedLocomotionBS         = LocomotionAnimSet->LocomotionBlendSpace;
+		CachedCrouchBS             = LocomotionAnimSet->CrouchBlendSpace;
+		CachedJumpStartSequence    = LocomotionAnimSet->JumpStartSequence;
+		CachedFallLoopSequence     = LocomotionAnimSet->FallLoopSequence;
+		CachedLandSequence         = LocomotionAnimSet->LandSequence;
+		CachedDashStartSequence    = LocomotionAnimSet->DashStartSequence;
+		CachedDashLoopSequence     = LocomotionAnimSet->DashLoopSequence;
+		CachedDashEndSequence      = LocomotionAnimSet->DashEndSequence;
+		CachedWallSlideSequence    = LocomotionAnimSet->WallSlideSequence;
+		CachedWallJumpSequence     = LocomotionAnimSet->WallJumpSequence;
+		CachedLadderStartSequence  = LocomotionAnimSet->LadderStartSequence;
+		CachedLadderLoopBS         = LocomotionAnimSet->LadderLoopBlendSpace;
+		CachedLadderEndSequence    = LocomotionAnimSet->LadderEndSequence;
+		CachedLedgeGrabStartSequence = LocomotionAnimSet->LedgeGrabStartSequence;
+		CachedLedgeGrabLoopSequence  = LocomotionAnimSet->LedgeGrabLoopSequence;
+		CachedLedgeClimbSequence   = LocomotionAnimSet->LedgeClimbSequence;
+		CachedLookAimOffset        = LocomotionAnimSet->LookAimOffset;
+
+		bHasDash     = CachedDashStartSequence    != nullptr;
+		bHasWall     = CachedWallSlideSequence     != nullptr;
+		bHasLadder   = CachedLadderStartSequence   != nullptr;
+		bHasLedgeGrab = CachedLedgeGrabStartSequence != nullptr;
+		bHasLand     = CachedLandSequence          != nullptr;
+		bHasLook     = CachedLookAimOffset         != nullptr;
 	}
 }

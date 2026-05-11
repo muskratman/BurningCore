@@ -6,7 +6,7 @@
 #include "Core/SaveGame/PlatformerSaveGame.h"
 #include "Core/SaveGame/PlatformerSaveGameSettings.h"
 #include "Kismet/GameplayStatics.h"
-#include "Platformer/Systems/PlatformerCheckpointActor.h"
+#include "Platformer/Environment/PlatformerCheckpoint.h"
 
 UPlatformerGameInstance::UPlatformerGameInstance()
 {
@@ -113,13 +113,14 @@ void UPlatformerGameInstance::CapturePlatformerProgress(UPlatformerSaveGame* Sav
 		return;
 	}
 
-	const APlatformerCheckpointActor* LastCheckpoint = PlatformerGameMode->GetLastCheckpoint();
+	const APlatformerCheckpoint* LastCheckpoint = PlatformerGameMode->GetLastCheckpoint();
 	if (!IsValid(LastCheckpoint))
 	{
 		return;
 	}
 
 	SaveGame->LastCheckpoint.CheckpointTag = LastCheckpoint->CheckpointID;
+	SaveGame->LastCheckpoint.CheckpointActorName = LastCheckpoint->GetFName();
 	SaveGame->LastCheckpoint.LevelName = FName(*UGameplayStatics::GetCurrentLevelName(this, true));
 }
 

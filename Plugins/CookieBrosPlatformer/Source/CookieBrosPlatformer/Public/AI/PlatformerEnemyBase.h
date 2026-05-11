@@ -2,19 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "Combat/PlatformerCombatCharacterBase.h"
+#include "GameplayTagContainer.h"
 #include "Perception/AIPerceptionTypes.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
+#include "TimerManager.h"
 #include "PlatformerEnemyBase.generated.h"
 
 class UAIPerceptionComponent;
 class UPlatformerEnemyArchetypeAsset;
+class UPlatformerEnemyAnimDataAsset;
 class UStateTreeComponent;
 class UGameplayEffect;
 class UAISenseConfig_Damage;
 class UAISenseConfig_Sight;
 class AEnemyProjectile;
-class USplineComponent;
-class UStaticMesh;
-class UStaticMeshComponent;
 
 /**
  * APlatformerEnemyBase
@@ -30,6 +31,9 @@ class COOKIEBROSPLATFORMER_API APlatformerEnemyBase : public APlatformerCombatCh
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UAIPerceptionComponent> PerceptionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI|Patrol", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UPlatformerPathComponent> PatrolPathComponent;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="AI", meta=(AllowPrivateAccess="true"))
@@ -94,17 +98,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category="AI|Settings")
 	void SetEnemyHitDelay(float InHitDelay);
 
+	UFUNCTION(BlueprintPure, Category="AI|Combat")
+	float GetMovementDelayOnHit() const { return MovementDelayOnHit; }
+
+	UFUNCTION(BlueprintCallable, Category="AI|Combat")
+	void SetMovementDelayOnHit(float InMovementDelayOnHit);
+
+	UFUNCTION(BlueprintPure, Category="AI|Combat")
+	float GetOnHitTakenImpulse() const { return OnHitTakenImpulse; }
+
+	UFUNCTION(BlueprintCallable, Category="AI|Combat")
+	void SetOnHitTakenImpulse(float InOnHitTakenImpulse);
+
 	UFUNCTION(BlueprintPure, Category="AI|Patrol")
-	TArray<FVector> GetPatrolPoints() const { return PatrolPoints; }
+	TArray<FPlatformerPathPoint> GetPatrolPoints() const;
 
 	UFUNCTION(BlueprintCallable, Category="AI|Patrol")
-	void SetPatrolPoints(const TArray<FVector>& InPatrolPoints);
-
-	UFUNCTION(BlueprintPure, Category="AI|Patrol")
-	float GetEnemyPatrolDelayTime() const { return PatrolDelayTime; }
-
-	UFUNCTION(BlueprintCallable, Category="AI|Patrol")
-	void SetEnemyPatrolDelayTime(float InPatrolDelayTime);
+	void SetPatrolPoints(const TArray<FPlatformerPathPoint>& InPatrolPoints);
 
 	UFUNCTION(BlueprintPure, Category="AI|Combat")
 	bool GetEnablePlayerChase() const { return bEnablePlayerChase; }
@@ -124,8 +134,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Combat|Projectile")
 	void SetEnemyProjectileDistance(float InProjectileDistance);
 
+	UFUNCTION(BlueprintPure, Category="AI|Animation")
+	UPlatformerEnemyAnimDataAsset* GetEnemyAnimDataAsset() const { return EnemyAnimDataAsset; }
+
+	UFUNCTION(BlueprintPure, Category="AI|Combat")
+	float GetEnemyAttackRange() const { return GetAttackRange(); }
+
+	UFUNCTION(BlueprintPure, Category="AI|Combat")
+	float GetEnemyAttackCooldown() const { return GetAttackCooldown(); }
+
+	UFUNCTION(BlueprintPure, Category="AI|Combat")
+	bool IsEnemyAttackInProgress() const { return PendingAttackTarget != nullptr && !bPendingAttackHitApplied; }
+
+	UFUNCTION(BlueprintCallable, Category="AI|Combat")
+	virtual bool ApplyPendingAttackHit();
+
 	FORCEINLINE UStateTreeComponent* GetStateTreeComponent() const { return StateTreeComponent; }
 	FORCEINLINE UAIPerceptionComponent* GetPerceptionComponent() const { return PerceptionComponent; }
+	FORCEINLINE UPlatformerPathComponent* GetPatrolPathComponent() const { return PatrolPathComponent; }
 	FORCEINLINE APlatformerCombatCharacterBase* GetCombatTarget() const { return CurrentCombatTarget; }
 	FORCEINLINE bool HasCombatTarget() const { return CurrentCombatTarget && CurrentCombatTarget->IsAlive(); }
 
@@ -142,10 +168,20 @@ protected:
 	virtual float GetProjectileMaxDistance() const;
 	virtual float GetHealthWidgetVerticalPadding() const override;
 	virtual bool CanAttackTarget(const APlatformerCombatCharacterBase* TargetActor) const;
-	virtual bool PerformAttack(APlatformerCombatCharacterBase* TargetActor);
+	virtual bool StartAttackAnimation(APlatformerCombatCharacterBase* TargetActor);
+	virtual bool ApplyAttackHit(APlatformerCombatCharacterBase* TargetActor);
+	virtual FGameplayTag GetAttackAnimationTagForTarget(const APlatformerCombatCharacterBase* TargetActor) const;
+	virtual float GetAttackAnimationPlayRate(const APlatformerCombatCharacterBase* TargetActor) const;
+	virtual float GetAttackHitFallbackDelay(const APlatformerCombatCharacterBase* TargetActor) const;
 	virtual void ApplyArchetypeCombatData(const UPlatformerEnemyArchetypeAsset* Archetype);
 	virtual void OnCombatTargetChanged(APlatformerCombatCharacterBase* PreviousTarget, APlatformerCombatCharacterBase* NewTarget);
 	float GetCombatDistanceToTarget(const APlatformerCombatCharacterBase* TargetActor) const;
+	bool IsMovementDelayedByHit() const;
+	void ApplyMovementDelayOnHit();
+	void ApplyOnHitTakenImpulse(const FHitResult& HitResult, AActor* DamageInstigatorActor);
+	virtual bool IsAttackAnimationPlaying(const APlatformerCombatCharacterBase* TargetActor) const;
+	bool IsAttackAnimationTagPlaying(const FGameplayTag& AnimTag) const;
+	const FGameplayTag& GetPendingAttackAnimationTag() const { return PendingAttackAnimationTag; }
 	void RefreshEnemyCollisionIgnores();
 	void IgnoreCollisionWithEnemy(APlatformerEnemyBase* OtherEnemy);
 	void UpdatePatrolMovement(float DeltaTime);
@@ -157,9 +193,14 @@ protected:
 	void ApplyFacingForCurrentPatrolSegment();
 	void ApplyFacingFromDirection(const FVector& MovementDirection);
 	void ApplyDefaultMeshFacing();
-#if WITH_EDITORONLY_DATA
-	void RefreshEditorPatrolPreviewComponents();
-#endif
+	void ClearPendingAttack();
+	float PlayEnemyAnimationMontage(const FGameplayTag& AnimTag, float PlayRate = 1.0f);
+	bool PlayAttackAnimationMontage(APlatformerCombatCharacterBase* TargetActor);
+	void SchedulePendingAttackHitFallback(APlatformerCombatCharacterBase* TargetActor);
+	void HandlePendingAttackHitFallback();
+	void ScheduleEnemyDeathDestroy(float DelaySeconds);
+	void HandleEnemyDeathDestroy();
+	const TArray<FPlatformerPathPoint>& GetRuntimePatrolPoints() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category="Combat", meta=(DisplayName="On Combat Target Changed"))
 	void BP_OnCombatTargetChanged(AActor* PreviousTarget, AActor* NewTarget);
@@ -184,8 +225,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Settings", meta=(ClampMin=0.0, Units="s"))
 	float HitDelay = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Patrol", meta=(DisplayName="Patrol Points (Relative)", MakeEditWidget=true))
-	TArray<FVector> PatrolPoints;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Hit Reaction", meta=(ClampMin=0.0, Units="s"))
+	float MovementDelayOnHit = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Combat|Hit Reaction", meta=(ClampMin=0.0, Units="cm/s"))
+	float OnHitTakenImpulse = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Patrol")
 	bool bEnableNativePatrol = true;
@@ -199,11 +243,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI|Patrol", meta=(ClampMin=0.0, Units="cm"))
 	float PatrolAcceptanceRadius = 25.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="AI|Patrol", meta=(ClampMin=0.0, Units="s"))
-	float PatrolDelayTime = 0.0f;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Projectile", meta=(ClampMin=0.0, Units="cm"))
 	float ProjectileMaxDistance = 600.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Attack", meta=(ClampMin=0.0, Units="s"))
+	float AttackHitFallbackDelay = 0.2f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation")
+	TObjectPtr<UPlatformerEnemyAnimDataAsset> EnemyAnimDataAsset;
+
+	UPROPERTY(Transient)
+	TObjectPtr<APlatformerCombatCharacterBase> PendingAttackTarget;
+
+	UPROPERTY(Transient)
+	FGameplayTag PendingAttackAnimationTag;
+
+	UPROPERTY(Transient)
+	float HitMovementDelayEndTime = -BIG_NUMBER;
 
 	UPROPERTY(Transient)
 	FVector PatrolOriginLocation = FVector::ZeroVector;
@@ -223,14 +279,13 @@ protected:
 	UPROPERTY(Transient)
 	bool bNeedsPatrolSegmentFacingUpdate = true;
 
-#if WITH_EDITORONLY_DATA
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Editor")
-	TObjectPtr<USplineComponent> PatrolPathSpline;
-
 	UPROPERTY(Transient)
-	TObjectPtr<UStaticMesh> PatrolPointPreviewMeshAsset;
+	bool bPatrolPathCompleted = false;
 
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UStaticMeshComponent>> PatrolPointPreviewMeshes;
-#endif
+	FTimerHandle PendingAttackHitFallbackTimerHandle;
+
+	FTimerHandle EnemyDeathDestroyTimerHandle;
+
+	bool bPendingAttackHitApplied = false;
+
 };

@@ -16,6 +16,9 @@ struct FPlatformerCheckpointSaveData
 	FGameplayTag CheckpointTag;
 
 	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Progression")
+	FName CheckpointActorName = NAME_None;
+
+	UPROPERTY(SaveGame, BlueprintReadWrite, Category="Progression")
 	FName LevelName = NAME_None;
 };
 

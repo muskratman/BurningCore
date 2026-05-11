@@ -101,6 +101,7 @@ protected:
 	TSubclassOf<UGameplayAbility> ResolveDashAbilityClass() const;
 	TSubclassOf<UGameplayAbility> ResolveBaseShotAbilityClass() const;
 	TSubclassOf<UGameplayAbility> ResolveChargeShotAbilityClass() const;
+	TSubclassOf<UGameplayAbility> ResolveHitReactionAbilityClass() const;
 	class USideViewMovementComponent* GetSideViewMovementComponent() const;
 	class UDragonFormComponent* GetDragonFormComponent() const;
 	UPlatformerTraversalComponent* GetTraversalComponent() const;
@@ -129,6 +130,9 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
 	TSubclassOf<UGameplayAbility> ChargeShotAbilityClass;
+
+	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
+	TSubclassOf<UGameplayAbility> HitReactionAbilityClass;
 
 	// State trackers for temporary mechanics
 	bool bIsGliding;

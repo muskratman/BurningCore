@@ -2,11 +2,10 @@
 
 #include "Platformer/Environment/PlatformerMovingPlatform.h"
 
-#include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
-#include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
 #include "Platformer/Environment/PlatformerDropThroughPlatformComponent.h"
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "UObject/ConstructorHelpers.h"
@@ -56,47 +55,12 @@ APlatformerMovingPlatform::APlatformerMovingPlatform()
 		DropThroughBottomCheckLayoutRoot,
 		DropThroughBottomCheckBox);
 
-	PointALayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PointALayoutRoot"));
-	PointALayoutRoot->SetupAttachment(Root);
-
-	PointA = CreateDefaultSubobject<UArrowComponent>(TEXT("PointA"));
-	PointA->SetupAttachment(PointALayoutRoot);
-	PointA->ArrowSize = 1.2f;
-
-	PointBLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("PointBLayoutRoot"));
-	PointBLayoutRoot->SetupAttachment(Root);
-
-	PointB = CreateDefaultSubobject<UArrowComponent>(TEXT("PointB"));
-	PointB->SetupAttachment(PointBLayoutRoot);
-	PointB->ArrowSize = 1.2f;
-
-#if WITH_EDITORONLY_DATA
-	MovementPathSpline = CreateEditorOnlyDefaultSubobject<USplineComponent>(TEXT("MovementPathSpline"));
-	if (MovementPathSpline)
-	{
-		MovementPathSpline->SetupAttachment(Root);
-		MovementPathSpline->SetClosedLoop(false);
-		MovementPathSpline->SetHiddenInGame(true);
-		MovementPathSpline->SetIsVisualizationComponent(true);
-		MovementPathSpline->bIsEditorOnly = true;
-	}
-
-	PointBPreviewMesh = CreateEditorOnlyDefaultSubobject<UStaticMeshComponent>(TEXT("PointBPreviewMesh"));
-	if (PointBPreviewMesh)
-	{
-		PointBPreviewMesh->SetupAttachment(PointBLayoutRoot);
-		PointBPreviewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		PointBPreviewMesh->SetHiddenInGame(true);
-		PointBPreviewMesh->SetIsVisualizationComponent(true);
-		PointBPreviewMesh->bIsEditorOnly = true;
-
-		static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-		if (SphereMesh.Succeeded())
-		{
-			PointBPreviewMesh->SetStaticMesh(SphereMesh.Object);
-		}
-	}
-#endif
+	MovementPathComponent = CreateDefaultSubobject<UPlatformerPathComponent>(TEXT("MovementPath"));
+	MovementPathComponent->SetupAttachment(Root);
+	MovementPathComponent->SetPathPoints({
+		FPlatformerPathPoint(FVector::ZeroVector, 0.5f, 1.0f),
+		FPlatformerPathPoint(FVector(500.0f, 0.0f, 0.0f), 0.5f, 1.0f)
+	});
 }
 
 void APlatformerMovingPlatform::SetPlatformSize(const FVector& InPlatformSize)
@@ -105,20 +69,68 @@ void APlatformerMovingPlatform::SetPlatformSize(const FVector& InPlatformSize)
 	RefreshMovingPlatformLayout();
 }
 
+void APlatformerMovingPlatform::SetMovementPathPoints(const TArray<FPlatformerPathPoint>& InPathPoints)
+{
+	if (!MovementPathComponent)
+	{
+		return;
+	}
+
+	TArray<FPlatformerPathPoint> ResolvedPathPoints = InPathPoints;
+	if (ResolvedPathPoints.Num() < 2)
+	{
+		ResolvedPathPoints.SetNum(2);
+	}
+
+	if (ResolvedPathPoints[1].PointLocation.IsNearlyZero())
+	{
+		ResolvedPathPoints[1].PointLocation = FVector(500.0f, 0.0f, 0.0f);
+	}
+
+	MovementPathComponent->SetPathPoints(ResolvedPathPoints);
+}
+
+const TArray<FPlatformerPathPoint>& APlatformerMovingPlatform::GetMovementPathPoints() const
+{
+	static const TArray<FPlatformerPathPoint> EmptyPathPoints;
+	return MovementPathComponent ? MovementPathComponent->GetPathPoints() : EmptyPathPoints;
+}
+
+FVector APlatformerMovingPlatform::GetMovementPathPointWorldLocation(int32 PointIndex) const
+{
+	return MovementPathComponent ? MovementPathComponent->GetPathPointWorldLocation(PointIndex) : GetActorLocation();
+}
+
+int32 APlatformerMovingPlatform::GetLastMovementPathPointIndex() const
+{
+	const TArray<FPlatformerPathPoint>& PathPoints = GetMovementPathPoints();
+	return FMath::Max(PathPoints.Num() - 1, 0);
+}
+
 void APlatformerMovingPlatform::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CachedPointALocation = PointA->GetComponentLocation();
-	CachedPointBLocation = PointB->GetComponentLocation();
+	EnsureMovementPathPoints();
+	CachedPathPointLocations.Reset(GetMovementPathPoints().Num());
+	for (int32 PointIndex = 0; PointIndex < GetMovementPathPoints().Num(); ++PointIndex)
+	{
+		CachedPathPointLocations.Add(GetMovementPathPointWorldLocation(PointIndex));
+	}
 
-	MoveState = bStartAtPointB ? EPlatformerMoverState::IdleAtPointB : EPlatformerMoverState::IdleAtPointA;
-	SetActorLocation(bStartAtPointB ? CachedPointBLocation : CachedPointALocation);
+	CurrentPathPointIndex = bStartAtPointB ? GetLastMovementPathPointIndex() : 0;
+	TargetPathPointIndex = INDEX_NONE;
+	ActivePathStartPointIndex = CurrentPathPointIndex;
+	MoveState = CurrentPathPointIndex == 0 ? EPlatformerMoverState::IdleAtPointA : EPlatformerMoverState::IdleAtPointB;
+	SetActorLocation(CachedPathPointLocations.IsValidIndex(CurrentPathPointIndex)
+		? CachedPathPointLocations[CurrentPathPointIndex]
+		: GetActorLocation());
 
 	if (bAutoStart)
 	{
 		bPendingInitialDeparture = true;
-		EnterPauseState(MoveState);
+		bPathRunActive = true;
+		EnterPauseAtCurrentPathPoint();
 	}
 }
 
@@ -145,38 +157,12 @@ void APlatformerMovingPlatform::RefreshMovingPlatformLayout()
 		DropThroughPlatformComponent->RefreshDropThroughPlatformLayout(ResolvedPlatformSize);
 	}
 
-	PlatformerEnvironment::ApplyRelativeTransform(
-		PointALayoutRoot,
-		PointABaseRelativeLocation,
-		FRotator::ZeroRotator,
-		FVector::OneVector,
-		PointATransformOffset);
-
-	PlatformerEnvironment::ApplyRelativeTransform(
-		PointBLayoutRoot,
-		PointBBaseRelativeLocation,
-		FRotator::ZeroRotator,
-		FVector::OneVector,
-		PointBTransformOffset);
-
-#if WITH_EDITORONLY_DATA
-	RefreshEditorPreviewComponents();
-#endif
+	EnsureMovementPathPoints();
 }
 
 void APlatformerMovingPlatform::PostLoad()
 {
 	Super::PostLoad();
-
-	const bool bUsesDefaultPerPointDelays =
-		FMath::IsNearlyEqual(PointADelay, 0.5f) &&
-		FMath::IsNearlyEqual(PointBDelay, 0.5f);
-
-	if (bUsesDefaultPerPointDelays && !FMath::IsNearlyEqual(PointDelay, 0.5f))
-	{
-		PointADelay = PointDelay;
-		PointBDelay = PointDelay;
-	}
 }
 
 #if WITH_EDITOR
@@ -189,51 +175,56 @@ void APlatformerMovingPlatform::PostEditMove(bool bFinished)
 		return;
 	}
 
-	RebaseEditorPointAToActorLocation();
+	RebaseEditorPathStartToActorLocation();
 	RefreshMovingPlatformLayout();
 }
 
-void APlatformerMovingPlatform::RebaseEditorPointAToActorLocation()
+void APlatformerMovingPlatform::RebaseEditorPathStartToActorLocation()
 {
-	if (PointABaseRelativeLocation.IsNearlyZero())
+	if (!MovementPathComponent)
+	{
+		return;
+	}
+
+	TArray<FPlatformerPathPoint> PathPoints = MovementPathComponent->GetPathPoints();
+	if (!PathPoints.IsValidIndex(0) || PathPoints[0].PointLocation.IsNearlyZero())
 	{
 		return;
 	}
 
 	Modify();
-	PointBBaseRelativeLocation -= PointABaseRelativeLocation;
-	PointABaseRelativeLocation = FVector::ZeroVector;
+	const FVector RebaseOffset = PathPoints[0].PointLocation;
+	for (FPlatformerPathPoint& PathPoint : PathPoints)
+	{
+		PathPoint.PointLocation -= RebaseOffset;
+	}
+	MovementPathComponent->SetPathPoints(PathPoints);
 }
 #endif
 
-#if WITH_EDITORONLY_DATA
-void APlatformerMovingPlatform::RefreshEditorPreviewComponents()
+void APlatformerMovingPlatform::EnsureMovementPathPoints()
 {
-	if (PointBPreviewMesh)
-	{
-		PointBPreviewMesh->SetRelativeLocation(FVector::ZeroVector);
-		PointBPreviewMesh->SetRelativeRotation(FRotator::ZeroRotator);
-		PointBPreviewMesh->SetRelativeScale3D(FVector(0.35f));
-	}
-
-	if (!MovementPathSpline)
+	if (!MovementPathComponent)
 	{
 		return;
 	}
 
-	const FVector LocalPointA = PointALayoutRoot ? PointALayoutRoot->GetRelativeLocation() : PointABaseRelativeLocation;
-	const FVector LocalPointB = PointBLayoutRoot ? PointBLayoutRoot->GetRelativeLocation() : PointBBaseRelativeLocation;
-
-	TArray<FVector> SplinePoints;
-	SplinePoints.Add(LocalPointA);
-	SplinePoints.Add(LocalPointB);
-
-	MovementPathSpline->SetSplinePoints(SplinePoints, ESplineCoordinateSpace::Local, false);
-	MovementPathSpline->SetSplinePointType(0, ESplinePointType::Linear, false);
-	MovementPathSpline->SetSplinePointType(1, ESplinePointType::Linear, false);
-	MovementPathSpline->UpdateSpline();
+	TArray<FPlatformerPathPoint> PathPoints = MovementPathComponent->GetPathPoints();
+	const int32 PreviousNum = PathPoints.Num();
+	if (PathPoints.Num() < 2)
+	{
+		PathPoints.SetNum(2);
+	}
+	if (PreviousNum == 0)
+	{
+		PathPoints[0] = FPlatformerPathPoint(FVector::ZeroVector, 0.5f, 1.0f);
+	}
+	if (PathPoints[1].PointLocation.IsNearlyZero())
+	{
+		PathPoints[1].PointLocation = FVector(500.0f, 0.0f, 0.0f);
+	}
+	MovementPathComponent->SetPathPoints(PathPoints);
 }
-#endif
 
 void APlatformerMovingPlatform::Tick(float DeltaTime)
 {
@@ -242,11 +233,8 @@ void APlatformerMovingPlatform::Tick(float DeltaTime)
 	switch (MoveState)
 	{
 	case EPlatformerMoverState::MovingToPointB:
-		MoveTowards(CachedPointBLocation, DeltaTime, EPlatformerMoverState::IdleAtPointB);
-		break;
-
 	case EPlatformerMoverState::MovingToPointA:
-		MoveTowards(CachedPointALocation, DeltaTime, EPlatformerMoverState::IdleAtPointA);
+		MoveTowards(DeltaTime);
 		break;
 
 	case EPlatformerMoverState::IdleAtPointA:
@@ -271,54 +259,65 @@ void APlatformerMovingPlatform::ResetInteraction()
 {
 	PauseTimer = 0.0f;
 	bPendingInitialDeparture = false;
+	bPathRunActive = false;
 }
 
-void APlatformerMovingPlatform::MoveTowards(const FVector& TargetLocation, float DeltaTime, EPlatformerMoverState ArrivalState)
+void APlatformerMovingPlatform::MoveTowards(float DeltaTime)
 {
+	if (!CachedPathPointLocations.IsValidIndex(TargetPathPointIndex))
+	{
+		EnterPauseAtCurrentPathPoint();
+		return;
+	}
+
+	const FVector TargetLocation = CachedPathPointLocations[TargetPathPointIndex];
 	const FVector CurrentLocation = GetActorLocation();
-	const FVector NextLocation = FMath::VInterpConstantTo(CurrentLocation, TargetLocation, DeltaTime, MoveSpeed);
+	const float ResolvedMoveSpeed = FMath::Max(MoveSpeed * GetPathSegmentSpeedScale(ActivePathStartPointIndex), 1.0f);
+	const FVector NextLocation = FMath::VInterpConstantTo(CurrentLocation, TargetLocation, DeltaTime, ResolvedMoveSpeed);
 
 	SetActorLocation(NextLocation);
 
 	if (FVector::DistSquared(NextLocation, TargetLocation) <= FMath::Square(ArrivalTolerance))
 	{
 		SetActorLocation(TargetLocation);
-		EnterPauseState(ArrivalState);
+		CurrentPathPointIndex = TargetPathPointIndex;
+		TargetPathPointIndex = INDEX_NONE;
+		EnterPauseAtCurrentPathPoint();
 	}
 }
 
-void APlatformerMovingPlatform::EnterPauseState(EPlatformerMoverState NewState)
+void APlatformerMovingPlatform::EnterPauseAtCurrentPathPoint()
 {
-	MoveState = NewState;
+	MoveState = CurrentPathPointIndex == 0 ? EPlatformerMoverState::IdleAtPointA : EPlatformerMoverState::IdleAtPointB;
 	PauseTimer = 0.0f;
 
-	if (NewState == EPlatformerMoverState::IdleAtPointA)
+	if (CurrentPathPointIndex == 0)
 	{
 		HandleReachedPointA();
 	}
-	else if (NewState == EPlatformerMoverState::IdleAtPointB)
+	else if (CurrentPathPointIndex == GetLastMovementPathPointIndex())
 	{
 		HandleReachedPointB();
 	}
 
-	const float ResolvedPointDelay =
-		MoveState == EPlatformerMoverState::IdleAtPointA ? PointADelay :
-		MoveState == EPlatformerMoverState::IdleAtPointB ? PointBDelay :
-		0.0f;
-
+	const float ResolvedPointDelay = GetPathPointDelay(CurrentPathPointIndex);
 	if (ResolvedPointDelay > 0.0f)
 	{
 		PauseTimer = ResolvedPointDelay;
 		return;
 	}
 
-	if (MoveState == EPlatformerMoverState::IdleAtPointA)
+	if (CurrentPathPointIndex == 0)
 	{
 		HandlePauseFinishedAtPointA();
 	}
-	else if (MoveState == EPlatformerMoverState::IdleAtPointB)
+	else if (CurrentPathPointIndex == GetLastMovementPathPointIndex())
 	{
 		HandlePauseFinishedAtPointB();
+	}
+	else
+	{
+		ContinuePathAfterPause();
 	}
 }
 
@@ -335,26 +334,30 @@ void APlatformerMovingPlatform::AdvancePause(float DeltaTime)
 		return;
 	}
 
-	if (MoveState == EPlatformerMoverState::IdleAtPointA)
+	if (CurrentPathPointIndex == 0)
 	{
 		HandlePauseFinishedAtPointA();
 	}
-	else if (MoveState == EPlatformerMoverState::IdleAtPointB)
+	else if (CurrentPathPointIndex == GetLastMovementPathPointIndex())
 	{
 		HandlePauseFinishedAtPointB();
+	}
+	else
+	{
+		ContinuePathAfterPause();
 	}
 }
 
 void APlatformerMovingPlatform::StartMovingAwayFromCurrentPoint()
 {
-	if (IsAtPointA())
-	{
-		StartMovingToPointB();
-	}
-	else if (IsAtPointB())
+	bPathRunActive = true;
+	if (CurrentPathPointIndex >= GetLastMovementPathPointIndex())
 	{
 		StartMovingToPointA();
+		return;
 	}
+
+	StartMovingToPathPoint(CurrentPathPointIndex + 1);
 }
 
 void APlatformerMovingPlatform::HandleReachedPointA()
@@ -367,36 +370,80 @@ void APlatformerMovingPlatform::HandleReachedPointB()
 
 void APlatformerMovingPlatform::HandlePauseFinishedAtPointA()
 {
-	const bool bShouldStartDeparture = bPendingInitialDeparture || bIsRepeatable;
+	const bool bShouldStartDeparture = bPendingInitialDeparture || bPathRunActive;
 	bPendingInitialDeparture = false;
 	if (bShouldStartDeparture)
 	{
-		StartMovingToPointB();
+		ContinuePathAfterPause();
 	}
 }
 
 void APlatformerMovingPlatform::HandlePauseFinishedAtPointB()
 {
-	const bool bShouldStartDeparture = bPendingInitialDeparture || bIsRepeatable;
+	const bool bShouldStartDeparture = bPendingInitialDeparture || bPathRunActive;
 	bPendingInitialDeparture = false;
 	if (bShouldStartDeparture)
 	{
-		StartMovingToPointA();
+		ContinuePathAfterPause();
 	}
 }
 
 void APlatformerMovingPlatform::StartMovingToPointA()
 {
-	PauseTimer = 0.0f;
-	MoveState = EPlatformerMoverState::MovingToPointA;
-	BP_MoveToTarget();
-	BP_OnMovementStarted();
+	bPathRunActive = false;
+	StartMovingToPathPoint(0);
 }
 
 void APlatformerMovingPlatform::StartMovingToPointB()
 {
+	bPathRunActive = false;
+	StartMovingToPathPoint(GetLastMovementPathPointIndex());
+}
+
+void APlatformerMovingPlatform::ContinuePathAfterPause()
+{
+	const int32 LastPointIndex = GetLastMovementPathPointIndex();
+	if (CurrentPathPointIndex < LastPointIndex)
+	{
+		StartMovingToPathPoint(CurrentPathPointIndex + 1);
+		return;
+	}
+
+	if (MovementPathComponent && MovementPathComponent->ShouldRepeatPath())
+	{
+		bPathRunActive = true;
+		StartMovingToPathPoint(0);
+		return;
+	}
+
+	bPathRunActive = false;
+}
+
+void APlatformerMovingPlatform::StartMovingToPathPoint(int32 InTargetPointIndex)
+{
+	if (!CachedPathPointLocations.IsValidIndex(InTargetPointIndex) || InTargetPointIndex == CurrentPathPointIndex)
+	{
+		return;
+	}
+
 	PauseTimer = 0.0f;
-	MoveState = EPlatformerMoverState::MovingToPointB;
+	ActivePathStartPointIndex = CurrentPathPointIndex;
+	TargetPathPointIndex = InTargetPointIndex;
+	MoveState = TargetPathPointIndex < CurrentPathPointIndex
+		? EPlatformerMoverState::MovingToPointA
+		: EPlatformerMoverState::MovingToPointB;
 	BP_MoveToTarget();
 	BP_OnMovementStarted();
+}
+
+float APlatformerMovingPlatform::GetPathPointDelay(int32 PointIndex) const
+{
+	const TArray<FPlatformerPathPoint>& PathPoints = GetMovementPathPoints();
+	return PathPoints.IsValidIndex(PointIndex) ? FMath::Max(PathPoints[PointIndex].PointDelay, 0.0f) : 0.0f;
+}
+
+float APlatformerMovingPlatform::GetPathSegmentSpeedScale(int32 StartPointIndex) const
+{
+	const TArray<FPlatformerPathPoint>& PathPoints = GetMovementPathPoints();
+	return PathPoints.IsValidIndex(StartPointIndex) ? FMath::Max(PathPoints[StartPointIndex].SpeedScale, 0.01f) : 1.0f;
 }

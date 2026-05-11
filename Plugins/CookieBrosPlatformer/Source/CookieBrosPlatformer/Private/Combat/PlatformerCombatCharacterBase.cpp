@@ -183,6 +183,23 @@ void APlatformerCombatCharacterBase::OnCombatDamageReceived(float DamageAmount, 
 		DamageInstigatorActor);
 }
 
+void APlatformerCombatCharacterBase::BroadcastCombatHitReceivedEvent(float DamageAmount, const FHitResult& HitResult, AActor* DamageInstigatorActor)
+{
+	if (!AbilitySystemComponent || DamageAmount <= 0.0f)
+	{
+		return;
+	}
+
+	FGameplayEventData EventData;
+	EventData.EventTag = PlatformerGameplayTags::Event_Combat_HitReceived;
+	EventData.EventMagnitude = DamageAmount;
+	EventData.Instigator = DamageInstigatorActor;
+	EventData.Target = this;
+	EventData.ContextHandle.AddHitResult(HitResult);
+
+	AbilitySystemComponent->HandleGameplayEvent(PlatformerGameplayTags::Event_Combat_HitReceived, &EventData);
+}
+
 void APlatformerCombatCharacterBase::OnCombatDeath(AActor* DamageInstigatorActor)
 {
 	if (AbilitySystemComponent)
@@ -209,7 +226,7 @@ void APlatformerCombatCharacterBase::OnCombatDeath(AActor* DamageInstigatorActor
 		SetLifeSpan(DeathLifeSpan);
 	}
 
-	BP_OnCombatDeath(DamageInstigatorActor);
+	HandleCombatDeathAftermath(DamageInstigatorActor);
 }
 
 void APlatformerCombatCharacterBase::OnCombatRevived()
@@ -218,6 +235,11 @@ void APlatformerCombatCharacterBase::OnCombatRevived()
 	{
 		AbilitySystemComponent->RemoveLooseGameplayTag(PlatformerGameplayTags::State_Combat_Dead);
 	}
+}
+
+void APlatformerCombatCharacterBase::HandleCombatDeathAftermath(AActor* DamageInstigatorActor)
+{
+	BP_OnCombatDeath(DamageInstigatorActor);
 }
 
 float APlatformerCombatCharacterBase::GetHealthWidgetVerticalPadding() const

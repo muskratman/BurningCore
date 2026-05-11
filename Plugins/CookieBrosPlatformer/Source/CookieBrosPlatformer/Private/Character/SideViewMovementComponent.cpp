@@ -279,9 +279,10 @@ void USideViewMovementComponent::StartNewPhysics(float deltaTime, int32 Iteratio
 	if (CharacterOwner)
 	{
 		APlatformerCharacterBase* PlatformerChar = Cast<APlatformerCharacterBase>(CharacterOwner);
-		bool bIsOnLadder = PlatformerChar && PlatformerChar->IsOnLadder();
+		const bool bIsInLadderPose =
+			PlatformerChar && (PlatformerChar->IsOnLadder() || PlatformerChar->IsLadderTopFinishActive());
 
-		if (!bIsOnLadder)
+		if (!bIsInLadderPose)
 		{
 			FRotator CurrentRot = UpdatedComponent->GetComponentRotation();
 			FRotator TargetRot = bFacingRight ? FRotator(0.0f, 0.0f, 0.0f) : FRotator(0.0f, 180.0f, 0.0f);
@@ -317,4 +318,3 @@ void USideViewMovementComponent::StartNewPhysics(float deltaTime, int32 Iteratio
 
 	Super::StartNewPhysics(deltaTime, Iterations);
 }
-

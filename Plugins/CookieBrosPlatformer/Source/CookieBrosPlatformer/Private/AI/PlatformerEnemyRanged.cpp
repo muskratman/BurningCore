@@ -1,5 +1,6 @@
 #include "AI/PlatformerEnemyRanged.h"
 
+#include "Animation/PlatformerEnemyAnimGameplayTags.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Data/PlatformerEnemyArchetypeAsset.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
@@ -42,7 +43,7 @@ float APlatformerEnemyRanged::GetAttackDamageAmount() const
 	return Super::GetAttackDamageAmount();
 }
 
-bool APlatformerEnemyRanged::PerformAttack(APlatformerCombatCharacterBase* TargetActor)
+bool APlatformerEnemyRanged::ApplyAttackHit(APlatformerCombatCharacterBase* TargetActor)
 {
 	if (!TargetActor || !ProjectileClass || !GetWorld())
 	{
@@ -101,6 +102,11 @@ bool APlatformerEnemyRanged::PerformAttack(APlatformerCombatCharacterBase* Targe
 	Projectile->InitializeProjectile(ProjectileSpeed, ProjectileLifetime, DamageSpec);
 	Projectile->ApplyProjectileMaxDistance(GetProjectileMaxDistance());
 	return true;
+}
+
+FGameplayTag APlatformerEnemyRanged::GetAttackAnimationTagForTarget(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	return PlatformerEnemyAnimGameplayTags::Anim_Enemy_Combat_RangedAttack;
 }
 
 void APlatformerEnemyRanged::ApplyArchetypeCombatData(const UPlatformerEnemyArchetypeAsset* Archetype)

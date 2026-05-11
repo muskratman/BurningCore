@@ -27,17 +27,10 @@ void UGA_PlatformerHitReaction::ActivateAbility(
 		return;
 	}
 
-	// Try data-driven lookup first, then fall back to virtual method
-	UAnimMontage* HitReactionMontage = nullptr;
-	if (UPlatformerAnimInstance* AnimInstance = GetPlatformerAnimInstance(ActorInfo))
-	{
-		HitReactionMontage = AnimInstance->ResolveAbilityMontage(
-			PlatformerAnimGameplayTags::Anim_Combat_HitReaction);
-	}
-	if (!HitReactionMontage)
-	{
-		HitReactionMontage = GetHitReactionMontage(ActorInfo);
-	}
+	UAnimMontage* HitReactionMontage = ResolveAbilityMontage(
+		ActorInfo,
+		PlatformerAnimGameplayTags::Anim_Combat_HitReaction,
+		GetHitReactionMontage(ActorInfo));
 
 	if (HitReactionMontage)
 	{

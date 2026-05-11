@@ -20,6 +20,7 @@ public:
 private:
 	void HandleEditorSelectionChanged(UObject* ChangedObject);
 	void HandleSettingsFinishedChanging(const FPropertyChangedEvent& PropertyChangedEvent);
+	void HandleObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& PropertyChangedEvent);
 	void RefreshFromSelection();
 	UPlatformerActorSettingsObject* CreateSettingsObjectForActor(class AActor* Actor) const;
 	FText GetSelectionSummaryText() const;

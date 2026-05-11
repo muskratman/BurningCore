@@ -4,7 +4,7 @@
 #include "UObject/Interface.h"
 #include "PlatformerCheckpointRegistry.generated.h"
 
-class APlatformerCheckpointActor;
+class APlatformerCheckpoint;
 
 UINTERFACE(MinimalAPI)
 class UPlatformerCheckpointRegistry : public UInterface
@@ -22,5 +22,5 @@ class COOKIEBROSPLATFORMER_API IPlatformerCheckpointRegistry
 
 public:
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category="Checkpoint")
-	void RegisterCheckpointActor(APlatformerCheckpointActor* Checkpoint);
+	void RegisterCheckpoint(APlatformerCheckpoint* Checkpoint);
 };

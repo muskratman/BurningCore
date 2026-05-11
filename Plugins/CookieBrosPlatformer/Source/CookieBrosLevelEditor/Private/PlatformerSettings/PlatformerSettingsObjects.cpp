@@ -1,7 +1,9 @@
 #include "PlatformerSettings/PlatformerSettingsObjects.h"
 
 #include "AI/PlatformerEnemyBase.h"
+#include "AI/PlatformerEnemyElite.h"
 #include "AI/PlatformerEnemyRanged.h"
+#include "Platformer/Environment/PlatformerCameraVolume.h"
 #include "Platformer/Environment/PlatformerConveyor.h"
 #include "Platformer/Environment/PlatformerDangerBlock.h"
 #include "Platformer/Environment/PlatformerDestructibleBlock.h"
@@ -164,6 +166,48 @@ namespace PlatformerSettingsPrivate
 
 }
 
+APlatformerCameraVolume* UPlatformerCameraVolumeSettingsObject::GetEditedCameraVolume() const
+{
+	return Cast<APlatformerCameraVolume>(GetEditedActor());
+}
+
+void UPlatformerCameraVolumeSettingsObject::PullFromActor(AActor* Actor)
+{
+	SetEditedActor(Actor);
+
+	const APlatformerCameraVolume* CameraVolume = Cast<APlatformerCameraVolume>(Actor);
+	if (!CameraVolume)
+	{
+		return;
+	}
+
+	VolumeSizeNew = CameraVolume->GetVolumeSizeNew();
+	LocationNew = CameraVolume->GetLocationNew();
+	VolumeSizeDefault = CameraVolume->GetVolumeSizeDefault();
+	LocationDefault = CameraVolume->GetLocationDefault();
+	BlendTime = CameraVolume->GetBlendTime();
+	EaseExponent = CameraVolume->GetEaseExponent();
+	TargetCameraSettings = CameraVolume->GetTargetCameraSettings();
+}
+
+void UPlatformerCameraVolumeSettingsObject::PushToActor()
+{
+	APlatformerCameraVolume* CameraVolume = GetEditedCameraVolume();
+	if (!CameraVolume)
+	{
+		return;
+	}
+
+	CameraVolume->Modify();
+	CameraVolume->SetVolumeSizeNew(VolumeSizeNew);
+	CameraVolume->SetLocationNew(LocationNew);
+	CameraVolume->SetVolumeSizeDefault(VolumeSizeDefault);
+	CameraVolume->SetLocationDefault(LocationDefault);
+	CameraVolume->SetCameraBlendSettings(BlendTime, EaseExponent);
+	CameraVolume->SetTargetCameraSettings(TargetCameraSettings);
+	CameraVolume->PostEditChange();
+}
+
 void UPlatformerConveyorSettingsObject::PullFromActor(AActor* Actor)
 {
 	SetEditedActor(Actor);
@@ -253,10 +297,15 @@ void UPlatformerEnemySettingsObject::PullFromActor(AActor* Actor)
 	MovementSpeed = Enemy->GetEnemyMovementSpeed();
 	Damage = Enemy->GetEnemyDamage();
 	HitDelay = Enemy->GetEnemyHitDelay();
-	PatrolDelayTime = Enemy->GetEnemyPatrolDelayTime();
+	MovementDelayOnHit = Enemy->GetMovementDelayOnHit();
+	OnHitTakenImpulse = Enemy->GetOnHitTakenImpulse();
 	bEnablePlayerChase = Enemy->GetEnablePlayerChase();
 	ChaseAgroRadius = Enemy->GetChaseAgroRadius();
-	PatrolPoints = Enemy->GetPatrolPoints();
+	if (const UPlatformerPathComponent* PathComponent = Enemy->GetPatrolPathComponent())
+	{
+		bRepeatPath = PathComponent->ShouldRepeatPath();
+		PathPoints = PathComponent->GetPathPoints();
+	}
 }
 
 void UPlatformerEnemySettingsObject::PushToActor()
@@ -272,10 +321,16 @@ void UPlatformerEnemySettingsObject::PushToActor()
 	Enemy->SetEnemyMovementSpeed(MovementSpeed);
 	Enemy->SetEnemyDamage(Damage);
 	Enemy->SetEnemyHitDelay(HitDelay);
-	Enemy->SetEnemyPatrolDelayTime(PatrolDelayTime);
+	Enemy->SetMovementDelayOnHit(MovementDelayOnHit);
+	Enemy->SetOnHitTakenImpulse(OnHitTakenImpulse);
 	Enemy->SetEnablePlayerChase(bEnablePlayerChase);
 	Enemy->SetChaseAgroRadius(ChaseAgroRadius);
-	Enemy->SetPatrolPoints(PatrolPoints);
+	if (UPlatformerPathComponent* PathComponent = Enemy->GetPatrolPathComponent())
+	{
+		PathComponent->Modify();
+		PathComponent->SetRepeatPath(bRepeatPath);
+		PathComponent->SetPathPoints(PathPoints);
+	}
 	Enemy->PostEditChange();
 }
 
@@ -314,6 +369,43 @@ void UPlatformerRangedEnemySettingsObject::PushToActor()
 	Enemy->PostEditChange();
 }
 
+APlatformerEnemyElite* UPlatformerEliteEnemySettingsObject::GetEditedEliteEnemy() const
+{
+	return Cast<APlatformerEnemyElite>(GetEditedActor());
+}
+
+void UPlatformerEliteEnemySettingsObject::PullFromActor(AActor* Actor)
+{
+	Super::PullFromActor(Actor);
+
+	const APlatformerEnemyElite* Enemy = Cast<APlatformerEnemyElite>(Actor);
+	if (!Enemy)
+	{
+		return;
+	}
+
+	CombatProfile = Enemy->GetEliteCombatProfile();
+	ProjectileSpeed = Enemy->GetEnemyProjectileSpeed();
+	ProjectileDistance = Enemy->GetEnemyProjectileDistance();
+}
+
+void UPlatformerEliteEnemySettingsObject::PushToActor()
+{
+	Super::PushToActor();
+
+	APlatformerEnemyElite* Enemy = GetEditedEliteEnemy();
+	if (!Enemy)
+	{
+		return;
+	}
+
+	Enemy->Modify();
+	Enemy->SetEliteCombatProfile(CombatProfile);
+	Enemy->SetEnemyProjectileSpeed(ProjectileSpeed);
+	Enemy->SetEnemyProjectileDistance(ProjectileDistance);
+	Enemy->PostEditChange();
+}
+
 void UPlatformerHazardProjectileSettingsObject::PullFromActor(AActor* Actor)
 {
 	SetEditedActor(Actor);
@@ -342,17 +434,15 @@ void UPlatformerMovingPlatformSettingsObject::PullFromActor(AActor* Actor)
 {
 	SetEditedActor(Actor);
 
-	FVector PointARelative = FVector::ZeroVector;
-	FVector PointBRelative = FVector(500.0f, 0.0f, 0.0f);
-	PlatformerSettingsPrivate::GetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), PointARelative);
-	PlatformerSettingsPrivate::GetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PointBRelative);
-
-	PointA = PlatformerSettingsPrivate::ResolveWorldPoint(Actor, PointARelative);
-	PointB = PlatformerSettingsPrivate::ResolveWorldPoint(Actor, PointBRelative);
+	if (const APlatformerMovingPlatform* MovingPlatform = Cast<APlatformerMovingPlatform>(Actor))
+	{
+		if (const UPlatformerPathComponent* PathComponent = MovingPlatform->GetMovementPathComponent())
+		{
+			bRepeatPath = PathComponent->ShouldRepeatPath();
+			PathPoints = PathComponent->GetPathPoints();
+		}
+	}
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), MoveSpeed);
-	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("PointADelay"), PointADelay);
-	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("PointBDelay"), PointBDelay);
-	PlatformerSettingsPrivate::GetTypedPropertyValue<FBoolProperty>(Actor, TEXT("bIsRepeatable"), bRepeatMovement);
 }
 
 void UPlatformerMovingPlatformSettingsObject::PushToActor()
@@ -363,13 +453,17 @@ void UPlatformerMovingPlatformSettingsObject::PushToActor()
 		return;
 	}
 
-	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), FVector::ZeroVector);
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointB));
+	if (APlatformerMovingPlatform* MovingPlatform = Cast<APlatformerMovingPlatform>(Actor))
+	{
+		MovingPlatform->Modify();
+		if (UPlatformerPathComponent* PathComponent = MovingPlatform->GetMovementPathComponent())
+		{
+			PathComponent->Modify();
+			PathComponent->SetRepeatPath(bRepeatPath);
+		}
+		MovingPlatform->SetMovementPathPoints(PathPoints);
+	}
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), FMath::Max(1.0f, MoveSpeed));
-	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("PointADelay"), FMath::Max(0.0f, PointADelay));
-	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("PointBDelay"), FMath::Max(0.0f, PointBDelay));
-	PlatformerSettingsPrivate::SetTypedPropertyValue<FBoolProperty>(Actor, TEXT("bIsRepeatable"), bRepeatMovement);
 }
 
 void UPlatformerSlipperyBlockSettingsObject::PullFromActor(AActor* Actor)
@@ -459,13 +553,14 @@ void UPlatformerTriggeredLiftSettingsObject::PullFromActor(AActor* Actor)
 {
 	SetEditedActor(Actor);
 
-	FVector PointARelative = FVector::ZeroVector;
-	FVector PointBRelative = FVector(0.0f, 0.0f, 500.0f);
-	PlatformerSettingsPrivate::GetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), PointARelative);
-	PlatformerSettingsPrivate::GetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PointBRelative);
-
-	PointA = PlatformerSettingsPrivate::ResolveWorldPoint(Actor, PointARelative);
-	PointB = PlatformerSettingsPrivate::ResolveWorldPoint(Actor, PointBRelative);
+	if (const APlatformerMovingPlatform* MovingPlatform = Cast<APlatformerMovingPlatform>(Actor))
+	{
+		if (const UPlatformerPathComponent* PathComponent = MovingPlatform->GetMovementPathComponent())
+		{
+			bRepeatPath = PathComponent->ShouldRepeatPath();
+			PathPoints = PathComponent->GetPathPoints();
+		}
+	}
 	PlatformerSettingsPrivate::GetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), MoveSpeed);
 }
 
@@ -477,9 +572,16 @@ void UPlatformerTriggeredLiftSettingsObject::PushToActor()
 		return;
 	}
 
-	PlatformerSettingsPrivate::MoveActorInEditor(Actor, PointA);
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointABaseRelativeLocation"), FVector::ZeroVector);
-	PlatformerSettingsPrivate::SetVectorPropertyValue(Actor, TEXT("PointBBaseRelativeLocation"), PlatformerSettingsPrivate::ResolveRelativePoint(Actor, PointB));
+	if (APlatformerMovingPlatform* MovingPlatform = Cast<APlatformerMovingPlatform>(Actor))
+	{
+		MovingPlatform->Modify();
+		if (UPlatformerPathComponent* PathComponent = MovingPlatform->GetMovementPathComponent())
+		{
+			PathComponent->Modify();
+			PathComponent->SetRepeatPath(bRepeatPath);
+		}
+		MovingPlatform->SetMovementPathPoints(PathPoints);
+	}
 	PlatformerSettingsPrivate::SetTypedPropertyValue<FFloatProperty>(Actor, TEXT("MoveSpeed"), FMath::Max(1.0f, MoveSpeed));
 }
 

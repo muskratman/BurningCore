@@ -1,12 +1,17 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AI/PlatformerEnemyCombatProfile.h"
+#include "Platformer/Environment/PlatformerCameraVolume.h"
+#include "Platformer/Environment/Components/PlatformerPathComponent.h"
 #include "UObject/Object.h"
 #include "PlatformerSettingsObjects.generated.h"
 
 class AActor;
 class APlatformerEnemyBase;
+class APlatformerEnemyElite;
 class APlatformerEnemyRanged;
+class APlatformerCameraVolume;
 class APlatformerTeleporter;
 
 UCLASS(Abstract, Transient)
@@ -26,6 +31,40 @@ protected:
 private:
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> EditedActor;
+};
+
+UCLASS(Transient)
+class UPlatformerCameraVolumeSettingsObject : public UPlatformerActorSettingsObject
+{
+	GENERATED_BODY()
+
+public:
+	virtual void PullFromActor(AActor* Actor) override;
+	virtual void PushToActor() override;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, Units="cm", DisplayName="Volume Size New"))
+	FVector VolumeSizeNew = FVector(400.0f, 1000.0f, 400.0f);
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Location New", MakeEditWidget=true))
+	FVector LocationNew = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, Units="cm", DisplayName="Volume Size Default"))
+	FVector VolumeSizeDefault = FVector(400.0f, 1000.0f, 400.0f);
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Location Default", MakeEditWidget=true))
+	FVector LocationDefault = FVector(500.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Blend Time"))
+	float BlendTime = 0.5f;
+
+	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.01, DisplayName="Ease Exponent"))
+	float EaseExponent = 2.0f;
+
+	UPROPERTY(EditAnywhere, Category="Camera Settings")
+	FPlatformerCameraVolumeSettings TargetCameraSettings;
+
+private:
+	APlatformerCameraVolume* GetEditedCameraVolume() const;
 };
 
 UCLASS(Transient)
@@ -114,29 +153,35 @@ public:
 	virtual void PullFromActor(AActor* Actor) override;
 	virtual void PushToActor() override;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, DisplayName="Health"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=1.0, DisplayName="Health"))
 	float Health = 100.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, Units="cm/s", DisplayName="Movement Speed"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=1.0, Units="cm/s", DisplayName="Movement Speed"))
 	float MovementSpeed = 300.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, DisplayName="Damage"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=0.0, DisplayName="Damage"))
 	float Damage = 10.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Hit Delay"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=0.0, Units="s", DisplayName="Hit Delay"))
 	float HitDelay = 1.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Patrol Delay Time"))
-	float PatrolDelayTime = 0.0f;
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=0.0, Units="s", DisplayName="Movement Delay On Hit"))
+	float MovementDelayOnHit = 0.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Enable Player Chase"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=0.0, Units="cm/s", DisplayName="On Hit Taken Impulse"))
+	float OnHitTakenImpulse = 0.0f;
+
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(DisplayName="Enable Player Chase"))
 	bool bEnablePlayerChase = false;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="cm", DisplayName="Chase Agro Radius"))
+	UPROPERTY(EditAnywhere, Category="CommonEnemySettings", meta=(ClampMin=0.0, Units="cm", DisplayName="Chase Agro Radius"))
 	float ChaseAgroRadius = 300.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Patrol Points (Relative)", MakeEditWidget=true))
-	TArray<FVector> PatrolPoints;
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Repeat Path"))
+	bool bRepeatPath = true;
+
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Path Points"))
+	TArray<FPlatformerPathPoint> PathPoints;
 
 protected:
 	APlatformerEnemyBase* GetEditedEnemy() const;
@@ -159,6 +204,28 @@ public:
 
 private:
 	APlatformerEnemyRanged* GetEditedRangedEnemy() const;
+};
+
+UCLASS(Transient)
+class UPlatformerEliteEnemySettingsObject : public UPlatformerEnemySettingsObject
+{
+	GENERATED_BODY()
+
+public:
+	virtual void PullFromActor(AActor* Actor) override;
+	virtual void PushToActor() override;
+
+	UPROPERTY(EditAnywhere, Category="EliteEnemySettings", meta=(DisplayName="Combat Profile"))
+	EPlatformerEnemyCombatProfile CombatProfile = EPlatformerEnemyCombatProfile::Hybrid;
+
+	UPROPERTY(EditAnywhere, Category="EliteEnemySettings", meta=(ClampMin=0.0, Units="cm/s", DisplayName="Projectile Speed"))
+	float ProjectileSpeed = 500.0f;
+
+	UPROPERTY(EditAnywhere, Category="EliteEnemySettings", meta=(ClampMin=0.0, Units="cm", DisplayName="Projectile Distance"))
+	float ProjectileDistance = 600.0f;
+
+private:
+	APlatformerEnemyElite* GetEditedEliteEnemy() const;
 };
 
 UCLASS(Transient)
@@ -199,23 +266,14 @@ public:
 	virtual void PullFromActor(AActor* Actor) override;
 	virtual void PushToActor() override;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point A"))
-	FVector PointA = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point B"))
-	FVector PointB = FVector(500.0f, 0.0f, 0.0f);
-
 	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, Units="cm/s", DisplayName="Move Speed"))
 	float MoveSpeed = 250.0f;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Delay At Point A"))
-	float PointADelay = 0.5f;
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Repeat Path"))
+	bool bRepeatPath = false;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=0.0, Units="s", DisplayName="Delay At Point B"))
-	float PointBDelay = 0.5f;
-
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Repeat A <-> B"))
-	bool bRepeatMovement = false;
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Path Points"))
+	TArray<FPlatformerPathPoint> PathPoints;
 };
 
 UCLASS(Transient)
@@ -307,14 +365,14 @@ public:
 	virtual void PullFromActor(AActor* Actor) override;
 	virtual void PushToActor() override;
 
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point A"))
-	FVector PointA = FVector::ZeroVector;
-
-	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(DisplayName="Point B"))
-	FVector PointB = FVector(0.0f, 0.0f, 500.0f);
-
 	UPROPERTY(EditAnywhere, Category="Quick Settings", meta=(ClampMin=1.0, Units="cm/s", DisplayName="Move Speed"))
 	float MoveSpeed = 250.0f;
+
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Repeat Path"))
+	bool bRepeatPath = false;
+
+	UPROPERTY(EditAnywhere, Category="Path Component", meta=(DisplayName="Path Points"))
+	TArray<FPlatformerPathPoint> PathPoints;
 };
 
 UCLASS(Transient)

@@ -1,12 +1,15 @@
 #include "GAS/Abilities/GA_PlatformerCombatAbilityBase.h"
 
 #include "AbilitySystemComponent.h"
+#include "Animation/PlatformerAnimDataAsset.h"
 #include "Animation/PlatformerAnimInstance.h"
 #include "Character/PlatformerCharacterBase.h"
 #include "Combat/PlatformerCombatCharacterBase.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 #include "Projectiles/Combat/CombatProjectile.h"
 #include "UObject/UObjectGlobals.h"
+
+DEFINE_LOG_CATEGORY(LogPlatformerCombatAbility);
 
 APlatformerCombatCharacterBase* UGA_PlatformerCombatAbilityBase::GetPlatformerCombatCharacter(const FGameplayAbilityActorInfo* ActorInfo) const
 {
@@ -199,37 +202,82 @@ UPlatformerAnimInstance* UGA_PlatformerCombatAbilityBase::GetPlatformerAnimInsta
 	return nullptr;
 }
 
+UAnimMontage* UGA_PlatformerCombatAbilityBase::ResolveAbilityMontage(
+	const FGameplayAbilityActorInfo* ActorInfo,
+	const FGameplayTag& AnimTag,
+	UAnimMontage* FallbackMontage) const
+{
+	// Path 1: PlatformerAnimInstance.AnimData (preferred — AnimBP can override the asset).
+	if (UPlatformerAnimInstance* AnimInstance = GetPlatformerAnimInstance(ActorInfo))
+	{
+		if (UAnimMontage* Montage = AnimInstance->ResolveAbilityMontage(AnimTag))
+		{
+			return Montage;
+		}
+	}
+
+	// Path 2: Character's AnimDataAsset directly. Works when the AnimBP does not
+	// inherit from UPlatformerAnimInstance (e.g. project uses a vanilla UAnimInstance).
+	if (const APlatformerCharacterBase* PlatformerCharacter = GetPlatformerCharacter(ActorInfo))
+	{
+		if (const UPlatformerAnimDataAsset* AnimDataAsset = PlatformerCharacter->GetAnimDataAsset())
+		{
+			if (UAnimMontage* Montage = AnimDataAsset->FindMontage(AnimTag))
+			{
+				return Montage;
+			}
+		}
+	}
+
+	// Path 3: caller-supplied fallback.
+	return FallbackMontage;
+}
+
 float UGA_PlatformerCombatAbilityBase::PlayAbilityAnimation(
 	const FGameplayAbilityActorInfo* ActorInfo,
 	const FGameplayTag& AnimTag,
 	UAnimMontage* FallbackMontage,
 	float PlayRate) const
 {
-	// Try data-driven lookup first
-	UAnimMontage* Montage = nullptr;
-	if (UPlatformerAnimInstance* AnimInstance = GetPlatformerAnimInstance(ActorInfo))
-	{
-		Montage = AnimInstance->ResolveAbilityMontage(AnimTag);
-	}
+	const AActor* AvatarActor = ActorInfo ? ActorInfo->AvatarActor.Get() : nullptr;
+	const FString AvatarName = AvatarActor ? AvatarActor->GetName() : TEXT("<null avatar>");
 
-	// Fallback to direct montage reference
+	UAnimMontage* Montage = ResolveAbilityMontage(ActorInfo, AnimTag, FallbackMontage);
 	if (!Montage)
 	{
-		Montage = FallbackMontage;
-	}
-
-	if (!Montage)
-	{
+		UE_LOG(LogPlatformerCombatAbility, Warning,
+			TEXT("PlayAbilityAnimation[%s]: no montage resolved for tag '%s'. Check (1) DA entry for the tag, (2) AnimDataAsset assigned on character or AnimBP, (3) fallback montage."),
+			*AvatarName, *AnimTag.ToString());
 		return 0.0f;
 	}
 
 	ACharacter* Character = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
 	if (!Character)
 	{
+		UE_LOG(LogPlatformerCombatAbility, Warning,
+			TEXT("PlayAbilityAnimation[%s]: tag '%s' resolved to montage '%s', but avatar is not an ACharacter — cannot play."),
+			*AvatarName, *AnimTag.ToString(), *Montage->GetName());
 		return 0.0f;
 	}
 
-	return Character->PlayAnimMontage(Montage, PlayRate);
+	float Duration = 0.0f;
+	if (UAbilitySystemComponent* AbilitySystemComponent = GetPlatformerAbilitySystem(ActorInfo))
+	{
+		Duration = AbilitySystemComponent->PlayMontage(
+			const_cast<UGA_PlatformerCombatAbilityBase*>(this),
+			GetCurrentActivationInfo(),
+			Montage,
+			PlayRate);
+	}
+	else
+	{
+		Duration = Character->PlayAnimMontage(Montage, PlayRate);
+	}
+
+	UE_LOG(LogPlatformerCombatAbility, Log,
+		TEXT("PlayAbilityAnimation[%s]: tag '%s' -> montage '%s' (rate=%.2f, duration=%.2fs). If anim is invisible despite duration>0, check montage slot/skeleton vs AnimBP."),
+		*AvatarName, *AnimTag.ToString(), *Montage->GetName(), PlayRate, Duration);
+	return Duration;
 }
 
 void UGA_PlatformerCombatAbilityBase::StopAbilityAnimation(
@@ -238,19 +286,7 @@ void UGA_PlatformerCombatAbilityBase::StopAbilityAnimation(
 	UAnimMontage* FallbackMontage,
 	float BlendOutTime) const
 {
-	// Try data-driven lookup first
-	UAnimMontage* Montage = nullptr;
-	if (UPlatformerAnimInstance* AnimInstance = GetPlatformerAnimInstance(ActorInfo))
-	{
-		Montage = AnimInstance->ResolveAbilityMontage(AnimTag);
-	}
-
-	// Fallback to direct montage reference
-	if (!Montage)
-	{
-		Montage = FallbackMontage;
-	}
-
+	UAnimMontage* Montage = ResolveAbilityMontage(ActorInfo, AnimTag, FallbackMontage);
 	if (!Montage)
 	{
 		return;

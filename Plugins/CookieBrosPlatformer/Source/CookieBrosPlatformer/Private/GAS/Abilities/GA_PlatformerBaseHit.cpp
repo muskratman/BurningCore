@@ -4,6 +4,7 @@
 #include "Character/PlatformerCharacterBase.h"
 #include "GameFramework/Character.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
+#include "GAS/PlatformerGameplayTags.h"
 #include "Traversal/PlatformerTraversalGameplayTags.h"
 
 UGA_PlatformerBaseHit::UGA_PlatformerBaseHit()
@@ -13,6 +14,7 @@ UGA_PlatformerBaseHit::UGA_PlatformerBaseHit()
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_Dash);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeHang);
 	ActivationBlockedTags.AddTag(PlatformerTraversalGameplayTags::State_Movement_LedgeClimb);
+	ActivationBlockedTags.AddTag(PlatformerGameplayTags::State_Movement_Ladder);
 }
 
 bool UGA_PlatformerBaseHit::CanActivateAbility(
@@ -23,6 +25,12 @@ bool UGA_PlatformerBaseHit::CanActivateAbility(
 	OUT FGameplayTagContainer* OptionalRelevantTags) const
 {
 	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	const APlatformerCharacterBase* PlatformerCharacter = GetPlatformerCharacter(ActorInfo);
+	if (PlatformerCharacter && (PlatformerCharacter->IsOnLadder() || PlatformerCharacter->IsLadderTopFinishActive()))
 	{
 		return false;
 	}

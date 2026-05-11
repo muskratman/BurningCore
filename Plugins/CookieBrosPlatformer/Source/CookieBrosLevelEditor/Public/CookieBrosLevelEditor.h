@@ -17,6 +17,8 @@ public:
 
 private:
 	void RegisterMenus();
+	void RegisterComponentVisualizers();
+	void UnregisterComponentVisualizers();
 	void OpenPaperTileMapImportTab();
 	void OpenPlatformerSettingsTab();
 	TSharedRef<class SDockTab> SpawnPaperTileMapImportTab(const class FSpawnTabArgs& SpawnTabArgs);
@@ -24,4 +26,5 @@ private:
 	bool HandleDeferredCommandLineImport(float DeltaTime);
 
 	FTSTicker::FDelegateHandle DeferredImportTickerHandle;
+	TArray<FName> RegisteredComponentVisualizerNames;
 };

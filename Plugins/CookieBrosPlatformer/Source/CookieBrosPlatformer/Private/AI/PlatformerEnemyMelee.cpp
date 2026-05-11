@@ -1,5 +1,6 @@
 #include "AI/PlatformerEnemyMelee.h"
 
+#include "Animation/PlatformerEnemyAnimGameplayTags.h"
 #include "Components/CapsuleComponent.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 
@@ -33,7 +34,7 @@ float APlatformerEnemyMelee::GetAttackDamageAmount() const
 	return Super::GetAttackDamageAmount();
 }
 
-bool APlatformerEnemyMelee::PerformAttack(APlatformerCombatCharacterBase* TargetActor)
+bool APlatformerEnemyMelee::ApplyAttackHit(APlatformerCombatCharacterBase* TargetActor)
 {
 	if (!TargetActor || !GetWorld())
 	{
@@ -81,4 +82,9 @@ bool APlatformerEnemyMelee::PerformAttack(APlatformerCombatCharacterBase* Target
 	FallbackHit.ImpactPoint = TargetActor->GetActorLocation();
 	FallbackHit.Location = TargetActor->GetActorLocation();
 	return ApplyCombatDamageToActor(TargetActor, GetAttackDamageAmount(), FallbackHit, AttackDamageEffectClass);
+}
+
+FGameplayTag APlatformerEnemyMelee::GetAttackAnimationTagForTarget(const APlatformerCombatCharacterBase* TargetActor) const
+{
+	return PlatformerEnemyAnimGameplayTags::Anim_Enemy_Combat_MeleeAttack;
 }
