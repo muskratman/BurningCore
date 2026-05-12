@@ -29,7 +29,7 @@ APlatformerMovingPlatform::APlatformerMovingPlatform()
 	PlatformMesh->SetCollisionResponseToAllChannels(ECR_Block);
 	PlatformMesh->SetGenerateOverlapEvents(true);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Top.SM_Platform_Top"));
 	if (CubeMesh.Succeeded())
 	{
 		PlatformMesh->SetStaticMesh(CubeMesh.Object);

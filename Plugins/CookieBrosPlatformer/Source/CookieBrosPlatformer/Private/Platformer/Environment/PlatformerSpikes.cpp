@@ -1,8 +1,10 @@
 #include "Platformer/Environment/PlatformerSpikes.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "UObject/ConstructorHelpers.h"
@@ -19,15 +21,21 @@ APlatformerSpikes::APlatformerSpikes()
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(MeshLayoutRoot);
-	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	Mesh->SetCollisionObjectType(ECC_WorldStatic);
-	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMesh.Succeeded())
+	InstancedSpikeMesh = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("InstancedSpikeMesh"));
+	InstancedSpikeMesh->SetupAttachment(MeshLayoutRoot);
+	InstancedSpikeMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	InstancedSpikeMesh->SetCollisionObjectType(ECC_WorldStatic);
+	InstancedSpikeMesh->SetCollisionResponseToAllChannels(ECR_Block);
+	InstancedSpikeMesh->SetCanEverAffectNavigation(false);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SpikeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Spikes.SM_Platform_Spikes"));
+	if (SpikeMesh.Succeeded())
 	{
-		Mesh->SetStaticMesh(CubeMesh.Object);
+		Mesh->SetStaticMesh(SpikeMesh.Object);
+		InstancedSpikeMesh->SetStaticMesh(SpikeMesh.Object);
 	}
 
 	DamageVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DamageVolumeLayoutRoot"));
@@ -53,17 +61,60 @@ void APlatformerSpikes::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	const FVector MeshScale = FVector(
-		FMath::Max(SpikeSize.X, 1.0f) / 100.0f,
-		FMath::Max(SpikeSize.Y, 1.0f) / 100.0f,
-		FMath::Max(SpikeSize.Z, 1.0f) / 100.0f);
-
 	PlatformerEnvironment::ApplyRelativeTransform(
 		MeshLayoutRoot,
-		FVector(0.0f, 0.0f, SpikeSize.Z * 0.5f),
+		FVector::ZeroVector,
 		FRotator::ZeroRotator,
-		MeshScale,
+		FVector::OneVector,
 		MeshTransformOffset);
+
+	UStaticMesh* SpikeStaticMesh = Mesh ? Mesh->GetStaticMesh() : nullptr;
+
+	if (Mesh)
+	{
+		Mesh->SetVisibility(false, true);
+		Mesh->SetHiddenInGame(true);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (InstancedSpikeMesh)
+	{
+		InstancedSpikeMesh->ClearInstances();
+
+		if (SpikeStaticMesh)
+		{
+			if (InstancedSpikeMesh->GetStaticMesh() != SpikeStaticMesh)
+			{
+				InstancedSpikeMesh->SetStaticMesh(SpikeStaticMesh);
+			}
+
+			const FVector MeshSize = (SpikeStaticMesh->GetBounds().BoxExtent * 2.0f).ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+			const float InstanceWidth = MeshSize.X;
+			const int32 InstanceCount = FMath::Max(1, FMath::CeilToInt(FMath::Max(SpikeSize.X, 1.0f) / InstanceWidth));
+			const float VisualWidth = InstanceWidth * static_cast<float>(InstanceCount);
+			const float InstanceDepth = MeshSize.Y;
+			const int32 InstanceDepthCount = FMath::Max(1, FMath::CeilToInt(FMath::Max(SpikeSize.Y, 1.0f) / InstanceDepth));
+			const float VisualDepth = InstanceDepth * static_cast<float>(InstanceDepthCount);
+			const FVector InstanceScale(
+				1.0f,
+				1.0f,
+				FMath::Max(SpikeSize.Z, 1.0f) / MeshSize.Z);
+			const float LocalStartX = (-0.5f * VisualWidth) + (0.5f * InstanceWidth);
+			const float LocalStartY = (-0.5f * VisualDepth) + (0.5f * InstanceDepth);
+
+			for (int32 InstanceIndex = 0; InstanceIndex < InstanceCount; ++InstanceIndex)
+			{
+				for (int32 InstanceDepthIndex = 0; InstanceDepthIndex < InstanceDepthCount; ++InstanceDepthIndex)
+				{
+					const FTransform InstanceTransform(
+						FRotator::ZeroRotator,
+						FVector(LocalStartX + (InstanceIndex * InstanceWidth), LocalStartY + (InstanceDepthIndex * InstanceDepth), 0.0f),
+						InstanceScale);
+					InstancedSpikeMesh->AddInstance(InstanceTransform);
+				}
+			}
+		}
+	}
 
 	DamageVolume->SetBoxExtent(SpikeSize * 0.5f);
 	PlatformerEnvironment::ApplyRelativeTransform(

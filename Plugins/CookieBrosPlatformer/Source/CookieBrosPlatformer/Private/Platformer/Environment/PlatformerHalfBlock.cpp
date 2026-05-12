@@ -26,7 +26,7 @@ APlatformerHalfBlock::APlatformerHalfBlock()
 	PlatformMesh->SetGenerateOverlapEvents(true);
 	PlatformMesh->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformBottomMesh(TEXT("/CookieBrosPlatformer/Meshes/Platform_Bottom.Platform_Bottom"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformBottomMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Bottom.SM_Platform_Bottom"));
 	if (PlatformBottomMesh.Succeeded())
 	{
 		PlatformMesh->SetStaticMesh(PlatformBottomMesh.Object);
@@ -88,12 +88,13 @@ void APlatformerHalfBlock::RefreshHalfBlockLayout()
 	const float HalfBlockHeight = GetResolvedHalfBlockHeight();
 	const float HalfBlockBottomZ = GetResolvedHalfBlockBottomZ();
 	const FVector HalfBlockSize(ResolvedPlatformSize.X, ResolvedPlatformSize.Y, HalfBlockHeight);
+	const FVector MeshScale(ResolvedPlatformSize.X / 100.0f, ResolvedPlatformSize.Y / 100.0f, 1.0f);
 
 	PlatformerEnvironment::ApplyRelativeTransform(
 		PlatformMesh,
-		FVector(0.0f, 0.0f, (bHalfTop ? 0.5f : -0.5f) * ResolvedPlatformSize.Z),
+		FVector(0.0f, 0.0f, bHalfTop ? (ResolvedPlatformSize.Z - HalfBlockHeight) : 0.0f),
 		FRotator::ZeroRotator,
-		ResolvedPlatformSize / 100.0f,
+		MeshScale,
 		PlatformMeshTransformOffset);
 
 	if (DropThroughLayoutRoot)

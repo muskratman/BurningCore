@@ -26,7 +26,7 @@ APlatformerCheckpoint::APlatformerCheckpoint()
 	CheckpointMesh->SetGenerateOverlapEvents(false);
 	CheckpointMesh->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CheckpointStaticMesh(TEXT("/CookieBrosPlatformer/Meshes/Platform_Checkpoint.Platform_Checkpoint"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CheckpointStaticMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Checkpoint.SM_Platform_Checkpoint"));
 	if (CheckpointStaticMesh.Succeeded())
 	{
 		CheckpointMesh->SetStaticMesh(CheckpointStaticMesh.Object);

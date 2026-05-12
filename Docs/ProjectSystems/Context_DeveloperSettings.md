@@ -262,6 +262,7 @@ There are two camera-related setting groups:
    - camera FOV
    - camera relative location/rotation
    - applied by `APlatformerCharacterBase`
+   - spring arm location remains character-local, so X offsets can bias the view toward the character's facing direction
 
 2. Camera manager settings in `FDeveloperPlatformerCameraManagerSettings`
    - projection mode
@@ -272,6 +273,7 @@ There are two camera-related setting groups:
    - dead zone and bound box
    - crouch interpolation speed
    - applied by `APlatformerCameraManager`
+   - smooths the world-space camera rig offset from the character rig across X/Y/Z, including the depth shift produced while a local spring-arm X offset rotates during turnarounds; X/Y rig offset smoothing uses `HorizontalOffsetInterpSpeedStart`
 
 Do not put camera manager follow behavior into character settings unless it is truly part of the character rig.
 

@@ -23,7 +23,7 @@ APlatformerSwitch::APlatformerSwitch()
 	SwitchMesh->SetCollisionObjectType(ECC_WorldDynamic);
 	SwitchMesh->SetCollisionResponseToAllChannels(ECR_Block);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Cube.SM_Platform_Cube"));
 	if (CubeMesh.Succeeded())
 	{
 		SwitchMesh->SetStaticMesh(CubeMesh.Object);

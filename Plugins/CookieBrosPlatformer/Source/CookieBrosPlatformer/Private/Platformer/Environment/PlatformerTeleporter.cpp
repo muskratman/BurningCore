@@ -30,7 +30,7 @@ APlatformerTeleporter::APlatformerTeleporter()
 	TeleporterMesh->SetupAttachment(RootComponent);
 	TeleporterMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Teleport.SM_Platform_Teleport"));
 	if (CylinderMesh.Succeeded())
 	{
 		TeleporterMesh->SetStaticMesh(CylinderMesh.Object);

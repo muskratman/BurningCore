@@ -19,6 +19,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleCharacterEnteredSurface(ACharacter* Character) override;
+	virtual void RefreshBlockLayout() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Falling Platform", meta=(ClampMin=0.0, Units="s"))
 	float FallDelay = 0.3f;

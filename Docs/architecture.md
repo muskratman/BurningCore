@@ -169,6 +169,7 @@ Source/DragonSlayer/
 
 - `APlatformerCameraManager` живе у плагіні як reusable side-view camera shell;
 - поточна камера використовує smooth follow і movement-based look-ahead;
+- facing-relative `SpringArm` offsets live in `APlatformerCharacterBase`, while `APlatformerCameraManager` smooths their world-space rig offset during character turnarounds;
 - фіксація через `Camera XMin Bounds` / `Camera XMax Bounds` більше не є частиною актуальної поведінки.
 
 ### Environment Components

@@ -8,7 +8,6 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/SpringArmComponent.h"
 
-
 void APlatformerCameraManager::BeginPlay() {
   Super::BeginPlay();
   LoadAndApplyDeveloperCameraManagerSettings();
@@ -224,12 +223,14 @@ void APlatformerCameraManager::UpdateViewTarget(FTViewTarget &OutVT,
     CurrentCameraRigOffset = TargetCameraRigOffset;
     bHasCameraRigOffset = true;
   } else {
-    const float HorizontalRigInterpSpeed = FMath::Max(
-        HorizontalOffsetInterpSpeedStart, HorizontalOffsetInterpSpeedEnd);
+    const float HorizontalRigInterpSpeed =
+        FMath::Max(0.0f, HorizontalOffsetInterpSpeedStart * 0.7f);
     CurrentCameraRigOffset.X =
         FMath::FInterpTo(CurrentCameraRigOffset.X, TargetCameraRigOffset.X,
                          DeltaTime, HorizontalRigInterpSpeed);
-    CurrentCameraRigOffset.Y = TargetCameraRigOffset.Y;
+    CurrentCameraRigOffset.Y =
+        FMath::FInterpTo(CurrentCameraRigOffset.Y, TargetCameraRigOffset.Y,
+                         DeltaTime, HorizontalRigInterpSpeed);
     CurrentCameraRigOffset.Z =
         FMath::FInterpTo(CurrentCameraRigOffset.Z, TargetCameraRigOffset.Z,
                          DeltaTime, VerticalOffsetInterpSpeed);

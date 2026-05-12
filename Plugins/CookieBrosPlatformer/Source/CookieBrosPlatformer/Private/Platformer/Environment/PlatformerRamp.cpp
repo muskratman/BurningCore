@@ -22,11 +22,39 @@ APlatformerRamp::APlatformerRamp()
 	RampMesh->SetCollisionResponseToAllChannels(ECR_Block);
 	RampMesh->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMesh.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Ramp45Mesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Ramp_45.SM_Platform_Ramp_45"));
+	if (Ramp45Mesh.Succeeded())
 	{
-		DefaultRampMesh = CubeMesh.Object;
-		RampMesh->SetStaticMesh(CubeMesh.Object);
+		DefaultRampMesh = Ramp45Mesh.Object;
+		RampMesh->SetStaticMesh(Ramp45Mesh.Object);
+
+		FPlatformerRampMeshVariant& Variant = RampMeshVariants.AddDefaulted_GetRef();
+		Variant.AngleDegrees = 45;
+		Variant.StaticMesh = Ramp45Mesh.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Ramp15Mesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Ramp15.SM_Platform_Ramp15"));
+	if (Ramp15Mesh.Succeeded())
+	{
+		FPlatformerRampMeshVariant& Variant = RampMeshVariants.AddDefaulted_GetRef();
+		Variant.AngleDegrees = 15;
+		Variant.StaticMesh = Ramp15Mesh.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Ramp25Mesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Ramp25.SM_Platform_Ramp25"));
+	if (Ramp25Mesh.Succeeded())
+	{
+		FPlatformerRampMeshVariant& Variant = RampMeshVariants.AddDefaulted_GetRef();
+		Variant.AngleDegrees = 25;
+		Variant.StaticMesh = Ramp25Mesh.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Ramp30Mesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Ramp30.SM_Platform_Ramp30"));
+	if (Ramp30Mesh.Succeeded())
+	{
+		FPlatformerRampMeshVariant& Variant = RampMeshVariants.AddDefaulted_GetRef();
+		Variant.AngleDegrees = 30;
+		Variant.StaticMesh = Ramp30Mesh.Object;
 	}
 }
 

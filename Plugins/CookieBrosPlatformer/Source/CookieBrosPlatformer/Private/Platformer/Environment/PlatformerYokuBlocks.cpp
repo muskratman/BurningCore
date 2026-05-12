@@ -2,12 +2,19 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "TimerManager.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlatformerYokuBlocks::APlatformerYokuBlocks()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerVanishingBlock.PlatformerVanishingBlock")));
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlatformBottomMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Bottom.SM_Platform_Bottom"));
+	if (PlatformBottomMesh.Succeeded())
+	{
+		BlockMesh->SetStaticMesh(PlatformBottomMesh.Object);
+	}
 }
 
 void APlatformerYokuBlocks::BeginPlay()

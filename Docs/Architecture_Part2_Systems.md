@@ -201,6 +201,7 @@ Project-specific UX, visual language, data binding і menu flow живуть у 
 - Character rig: `USpringArmComponent` + `UCameraComponent` у `APlatformerCharacterBase`
 - Поточна поведінка: smooth follow + movement look-ahead
 - Поточне правило: hard X clamping через `Camera XMin Bounds` / `Camera XMax Bounds` не використовується
+- Facing-relative spring-arm offsets stay on the character rig. `APlatformerCameraManager` smooths the resulting world-space rig offset across X/Y/Z so turnarounds do not snap the camera depth or focus. X/Y rig offset smoothing uses `HorizontalOffsetInterpSpeedStart`.
 
 ---
 

@@ -21,7 +21,7 @@ APlatformerBlockBase::APlatformerBlockBase()
 	BlockMesh->SetCollisionResponseToAllChannels(ECR_Block);
 	BlockMesh->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Cube.SM_Platform_Cube"));
 	if (CubeMesh.Succeeded())
 	{
 		BlockMesh->SetStaticMesh(CubeMesh.Object);

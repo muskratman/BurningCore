@@ -26,7 +26,7 @@ APlatformerWallTurret::APlatformerWallTurret()
 	TurretMesh->SetCollisionObjectType(ECC_WorldStatic);
 	TurretMesh->SetCollisionResponseToAllChannels(ECR_Block);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_TurretWall.SM_Platform_TurretWall"));
 	if (CubeMesh.Succeeded())
 	{
 		TurretMesh->SetStaticMesh(CubeMesh.Object);

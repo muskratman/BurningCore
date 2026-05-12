@@ -24,7 +24,7 @@ APlatformerLadderTop::APlatformerLadderTop()
 	TopBlockMesh->SetGenerateOverlapEvents(true);
 	TopBlockMesh->SetCanEverAffectNavigation(true);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Top.SM_Platform_Top"));
 	if (CubeMesh.Succeeded())
 	{
 		TopBlockMesh->SetStaticMesh(CubeMesh.Object);

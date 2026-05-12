@@ -58,6 +58,12 @@ DragonSlayer.uproject
 - Debug viewport drawing for `UPlatformerPathComponent` should stay inside that single component through an editor-only debug render proxy. Do not add spline mesh, sphere, or text child components to runtime environment actors solely for path preview.
 - If a platformer actor moves between path points, runtime movement should read from `UPlatformerPathComponent::PathPoints` directly. Do not add separate `PointA` / `PointB`, per-point delay, per-segment speed, or repeat properties on the actor unless they carry non-debug gameplay behavior that path points cannot express.
 
+## Camera Rig
+
+- `APlatformerCharacterBase` owns the reusable character-local camera rig. `USpringArmComponent` location offsets may be facing-relative, so `SpringArmLocation.X` can bias the view toward the character's facing direction.
+- `APlatformerCameraManager` must smooth the resulting world-space camera rig offset across X/Y/Z. X/Y rig offset smoothing uses `HorizontalOffsetInterpSpeedStart`. Do not hard-assign the depth component during turnarounds, because local spring-arm X offsets rotate through world Y while the character changes yaw.
+- Follow behavior, horizontal/vertical look-ahead, dead zone, bound box, projection, and smoothing belong to `APlatformerCameraManager`. Do not put movement-driven camera follow behavior into character rig transforms.
+
 ## Ladder Lifecycle
 
 - `APlatformerCharacterBase` owns a single `EPlatformerLadderState` enum (`None / Mounting / Climbing / JumpBoost / CrouchBoost / TopFinish`) as the source of truth for ladder behavior. All transitions go through `SetLadderState`; the per-tick driver is `TickLadderState`. Animation flags are derived from the enum via `ShouldPlayLadder*Animation()` getters — do not introduce parallel ladder state booleans on the character.

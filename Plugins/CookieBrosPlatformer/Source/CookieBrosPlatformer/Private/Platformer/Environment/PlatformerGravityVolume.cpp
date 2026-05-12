@@ -25,7 +25,7 @@ APlatformerGravityVolume::APlatformerGravityVolume()
 	VolumeMesh->SetCollisionResponseToAllChannels(ECR_Overlap);
 	VolumeMesh->SetGenerateOverlapEvents(true);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Cube.SM_Platform_Cube"));
 	if (CubeMesh.Succeeded())
 	{
 		VolumeMesh->SetStaticMesh(CubeMesh.Object);

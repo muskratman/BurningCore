@@ -7,6 +7,7 @@
 
 class UBoxComponent;
 class UGameplayEffect;
+class UHierarchicalInstancedStaticMeshComponent;
 class UPrimitiveComponent;
 class USceneComponent;
 class UStaticMeshComponent;
@@ -39,6 +40,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UStaticMeshComponent> Mesh;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UHierarchicalInstancedStaticMeshComponent> InstancedSpikeMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USceneComponent> DamageVolumeLayoutRoot;

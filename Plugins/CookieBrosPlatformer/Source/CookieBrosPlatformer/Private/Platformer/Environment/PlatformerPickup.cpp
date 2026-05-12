@@ -21,7 +21,7 @@ APlatformerPickup::APlatformerPickup()
 	PickupMesh->SetupAttachment(RootComponent);
 	PickupMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Pickup.SM_Platform_Pickup"));
 	if (SphereMesh.Succeeded())
 	{
 		PickupMesh->SetStaticMesh(SphereMesh.Object);

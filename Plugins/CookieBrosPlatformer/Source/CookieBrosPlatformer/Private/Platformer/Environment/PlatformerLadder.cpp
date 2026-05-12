@@ -22,7 +22,7 @@ APlatformerLadder::APlatformerLadder()
 	LadderMeshInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	LadderMeshInstances->SetCanEverAffectNavigation(false);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Ladder.SM_Platform_Ladder"));
 	if (CubeMesh.Succeeded())
 	{
 		LadderMeshInstances->SetStaticMesh(CubeMesh.Object);

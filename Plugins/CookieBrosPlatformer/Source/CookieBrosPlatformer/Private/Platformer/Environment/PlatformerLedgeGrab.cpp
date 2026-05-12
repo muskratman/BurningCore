@@ -15,8 +15,6 @@ namespace PlatformerLedgeGrabPrivate
 
 APlatformerLedgeGrab::APlatformerLedgeGrab()
 {
-	BlockMesh->SetStaticMesh(nullptr);
-
 	LedgeTriggerLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("LedgeTriggerLayoutRoot"));
 	LedgeTriggerLayoutRoot->SetupAttachment(Root);
 

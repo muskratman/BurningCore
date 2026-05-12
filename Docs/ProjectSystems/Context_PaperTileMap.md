@@ -109,7 +109,8 @@ Ramp_<AngleDegrees>_<SegmentIndex>
 4. Resolve cells from rendered layers.
 5. Build prepared spawn records from tile positions and tile permutation flags.
 6. Merge compatible adjacent cells:
-   - horizontal runs for blocks, half blocks, soft platforms, spikes, moving platforms, triggered lifts
+   - horizontal runs for blocks, half blocks, soft platforms, moving platforms, triggered lifts
+   - horizontal runs for spikes as one `APlatformerSpikes` actor with repeated mesh instances, not one stretched visual mesh
    - vertical runs for ladders, spawning only the run's `LadderTop` actor
    - rectangles for streams, gravity volumes, and camera volumes
 7. Anchor the generated layout around the primary PlayerStart when present.
@@ -154,6 +155,8 @@ Ladders use `BlockSize.Y` as the rear climb volume offset. The generated `APlatf
 - `APlatformerSwitch::SetTriggerExtent()`
 
 Generic actor classes are spawned but not specially configured.
+
+`APlatformerSpikes` is the exception to the old "scale one mesh to the merged span" mental model: generated horizontal spike runs still become one actor for clean ownership and a single damage volume, but the visual mesh is repeated internally as HISM instances across `SpikeSize.X` and `SpikeSize.Y`, similar to ladder mesh generation.
 
 For a ladder run whose topmost TileMap cell is `LadderTop`, the top section stays enabled: the top platform mesh, drop-through checks, and top entry volume are active. For a run made only from regular `Ladder` cells, the generated actor still uses `APlatformerLadderTop`, but its top section is hidden and collision-disabled so it behaves like a plain ladder without a walkable cap.
 

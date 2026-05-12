@@ -3,11 +3,19 @@
 #include "Character/PlatformerCharacterBase.h"
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
+#include "UObject/ConstructorHelpers.h"
 
 APlatformerClosingDoor::APlatformerClosingDoor()
 {
 	PaletteIcon = TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/CookieBrosPlatformer/Textures/PlatformerBlock.PlatformerBlock")));
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/CookieBrosPlatformer/Meshes/SM_Platform_Cube.SM_Platform_Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		PlatformMesh->SetStaticMesh(CubeMesh.Object);
+	}
 
 	TriggerVolumeLayoutRoot = CreateDefaultSubobject<USceneComponent>(TEXT("TriggerVolumeLayoutRoot"));
 	TriggerVolumeLayoutRoot->SetupAttachment(Root);
