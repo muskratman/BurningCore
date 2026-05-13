@@ -47,7 +47,8 @@ Checkpoint ownership:
 ### Practical Reading
 
 - side-view movement shell, camera rig і combat bootstrap приходять із плагіна;
-- DragonSlayer додає форми, Overdrive, shot logic, project attributes і current playable bindings.
+- DragonSlayer додає форми, Overdrive, shot logic, project attributes і current playable glue.
+- Enhanced Input bindings for playable characters should come from `UPlatformerInputConfig`, not duplicate `UInputAction` properties on character classes.
 
 ### Ladder FSM (Reusable Layer)
 
@@ -92,6 +93,14 @@ Checkpoint ownership:
 ### Rule
 
 Якщо ability або effect має сенс поза DragonSlayer, він може бути кандидатом у плагін. Якщо він знає про Dragon forms, Overdrive або Dragon projectile flow, він має лишатися у проекті.
+
+### Ability Loadout & Input
+
+- `UPlatformerAbilitySet` is the source of truth for abilities granted to playable platformer characters.
+- Each ability entry can carry an optional `InputTag`. `APlatformerCharacterBase` copies it into the granted ability spec's dynamic source tags.
+- `UPlatformerInputConfig` maps Enhanced Input assets to input tags. Non-ability input uses tags such as `Input.Move`, `Input.Look`, `Input.Fly`, and `Input.Glide`; ability input uses the same `Input.Ability.*` tags as the ability set entries.
+- Character input glue activates/releases abilities by input tags such as `Input.Ability.Jump`, `Input.Ability.Dash`, `Input.Ability.Crouch`, `Input.Ability.BaseShot`, and `Input.Ability.ChargeShot`.
+- If a playable ability is absent from the configured ability set, the action is disabled. Production character code should not silently fall back to native `Jump`, `Crouch`, `UnCrouch`, or hardcoded ability classes.
 
 ---
 
@@ -140,6 +149,8 @@ AI має залишатися читабельним і добре тюнити
 - surface block variants
 
 Shared environment path data also belongs to the plugin. `UPlatformerPathComponent` is the reusable local-space path component used by enemy patrols, moving platform / triggered lift / closing door routes, and camera volume point pairs. Each `FPlatformerPathPoint` owns `PointLocation`, `PointDelay`, and `SpeedScale`, while the component owns `bRepeatPath`. It also owns a single editor debug render proxy that draws red lines between points, point markers, and index labels without adding child components to runtime actors. The component visualizer adds selectable point handles in editor viewports, while the debug proxy returns no scene proxy in game worlds, so path visualization is hidden during play. Moving platform-derived actors read route, delays, speed scale, and repeat mode from the component; actor-local `PointA` / `PointB` scene components and duplicate point delay/repeat properties are no longer part of the movement model.
+
+Traversal tuning for ledge, dash, and wall movement is owned by `UPlatformerTraversalConfigDataAsset`. `UPlatformerTraversalComponent` does not provide embedded fallback/default traversal settings; if no config asset is assigned, traversal is disabled and a warning is logged for the owning actor. Runtime developer traversal overrides may tune numeric values, but they must preserve the `bEnabled` flags from the traversal config so saved developer slots cannot re-enable mechanics disabled for a character archetype. In editor builds, the developer settings Save/Save As flow bakes traversal tuning back into the `TraversalConfig` assigned on the target character's `UPlatformerTraversalComponent`; it updates the data asset rather than Blueprint component defaults.
 
 DragonSlayer може додавати project-specific glue на рівні playable character або level flow, але не повинен копіювати ці актори в runtime module без сильної причини.
 

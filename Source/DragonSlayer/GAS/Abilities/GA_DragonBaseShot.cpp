@@ -7,9 +7,11 @@
 #include "Data/DragonFormDataAsset.h"
 #include "GAS/Attributes/PlatformerCharacterAttributeSet.h"
 #include "Projectiles/Combat/DragonProjectile.h"
+#include "Traversal/PlatformerTraversalGameplayTags.h"
 
 UGA_DragonBaseShot::UGA_DragonBaseShot()
 {
+	ActivationBlockedTags.RemoveTag(PlatformerTraversalGameplayTags::State_Movement_Dash);
 }
 
 bool UGA_DragonBaseShot::BuildBaseShotData(

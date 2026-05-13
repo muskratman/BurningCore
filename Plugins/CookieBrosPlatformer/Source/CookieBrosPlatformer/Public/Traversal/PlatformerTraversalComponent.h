@@ -58,15 +58,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Traversal")
 	TObjectPtr<UPlatformerTraversalConfigDataAsset> TraversalConfig;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Traversal|Fallback")
-	FPlatformerLedgeTraversalSettings DefaultLedgeSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Traversal|Fallback")
-	FPlatformerDashSettings DefaultDashSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Traversal|Fallback")
-	FPlatformerWallTraversalSettings DefaultWallSettings;
-
 	UPROPERTY(Transient)
 	bool bHasDeveloperTraversalSettingsOverride = false;
 

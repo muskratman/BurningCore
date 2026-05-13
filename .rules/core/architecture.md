@@ -58,6 +58,13 @@ DragonSlayer.uproject
 - Debug viewport drawing for `UPlatformerPathComponent` should stay inside that single component through an editor-only debug render proxy. Do not add spline mesh, sphere, or text child components to runtime environment actors solely for path preview.
 - If a platformer actor moves between path points, runtime movement should read from `UPlatformerPathComponent::PathPoints` directly. Do not add separate `PointA` / `PointB`, per-point delay, per-segment speed, or repeat properties on the actor unless they carry non-debug gameplay behavior that path points cannot express.
 
+## Traversal Config
+
+- `UPlatformerTraversalConfigDataAsset` is the single source of truth for ledge, dash, and wall traversal tuning. `UPlatformerTraversalComponent` and `UPlatformerTraversalMovementComponent` must not expose duplicate fallback/default `FPlatformer*TraversalSettings` properties.
+- If a traversal component has no `TraversalConfig`, traversal must stay disabled and log a warning naming the owning Blueprint/actor. Do not silently fall back to embedded defaults.
+- Runtime developer traversal overrides may tune traversal values, but must preserve `bEnabled` flags from `UPlatformerTraversalConfigDataAsset`. Data assets own whether ledge, dash, or wall traversal is available for a character archetype.
+- In editor builds, developer save flows may bake traversal tuning back into the `TraversalConfig` assigned on the target character's `UPlatformerTraversalComponent`. This bake must update the data asset, not Blueprint component defaults, and must preserve the config asset's existing `bEnabled` flags.
+
 ## Camera Rig
 
 - `APlatformerCharacterBase` owns the reusable character-local camera rig. `USpringArmComponent` location offsets may be facing-relative, so `SpringArmLocation.X` can bias the view toward the character's facing direction.
@@ -78,6 +85,9 @@ DragonSlayer.uproject
 
 ## Ability Animation Resolution
 
+- `UPlatformerAbilitySet` is the source of truth for granted playable abilities. Each ability entry may define an `InputTag`; `APlatformerCharacterBase` copies that tag into the granted spec's dynamic source tags via `FGameplayAbilitySpec::GetDynamicSpecSourceTags()`.
+- `UPlatformerInputConfig` is the source of truth for Enhanced Input mapping contexts and `InputTag -> UInputAction` bindings. Non-ability input uses tags such as `Input.Move`, `Input.Look`, `Input.Fly`, and `Input.Glide`; ability input uses `Input.Ability.*`. Character classes should not expose duplicate `UInputAction` properties for the same bindings.
+- Project input glue should activate/release granted abilities by input tags (`Input.Ability.Jump`, `Input.Ability.Dash`, `Input.Ability.Crouch`, `Input.Ability.BaseShot`, `Input.Ability.ChargeShot`) instead of hardcoded ability classes. If an ability set does not grant an entry for an input tag, that input action is disabled; do not fall back to native `Jump`, `Crouch`, or direct ability class activation in production character code.
 - All combat abilities resolve montages through `UGA_PlatformerCombatAbilityBase::ResolveAbilityMontage(ActorInfo, AnimTag, FallbackMontage)`. Resolution order: `UPlatformerAnimInstance::AnimData` → `APlatformerCharacterBase::AnimDataAsset` → caller fallback. This works whether or not the AnimBP inherits the platformer base.
 - `PlayAbilityAnimation` must play resolved montages through `UAbilitySystemComponent::PlayMontage` when an ASC is available. Direct `ACharacter::PlayAnimMontage` is only a fallback for non-GAS avatars; GAS montage state, prediction, and replication belong to ASC.
 - `PlayAbilityAnimation` logs a warning via `LogPlatformerCombatAbility` when no path resolves the tag — silent fail is not acceptable for animation-driven combat.

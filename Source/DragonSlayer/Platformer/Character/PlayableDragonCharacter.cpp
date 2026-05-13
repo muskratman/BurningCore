@@ -1,26 +1,22 @@
 #include "PlayableDragonCharacter.h"
 
 #include "Character/DragonFormComponent.h"
-#include "GAS/Abilities/GA_PlatformerDash.h"
-#include "GAS/Abilities/GA_DragonBaseShot.h"
-#include "GAS/Abilities/GA_DragonChargeShot.h"
-#include "GAS/Abilities/GA_HitReaction.h"
 #include "Character/SideViewMovementComponent.h"
+#include "Input/PlatformerInputConfig.h"
+#include "Platformer/Character/DragonDashMovementComponent.h"
 #include "Traversal/PlatformerTraversalComponent.h"
 #include "Traversal/PlatformerTraversalMovementComponent.h"
-#include "AbilitySystemComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "GAS/PlatformerGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputAction.h"
 #include "Platformer/Environment/PlatformerDropThroughPlatformComponent.h"
 #include "Platformer/Environment/PlatformerSoftPlatform.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
 	constexpr float CrouchInputThreshold = -0.5f;
-	const TCHAR* DefaultLookActionPath = TEXT("/Game/Blueprints/Input/Actions/IA_Look.IA_Look");
 
 	float ReadVerticalInputValue(const FInputActionValue& Value)
 	{
@@ -44,7 +40,7 @@ namespace
 }
 
 APlayableDragonCharacter::APlayableDragonCharacter(const FObjectInitializer& ObjectInitializer)
-	: Super(ObjectInitializer.SetDefaultSubobjectClass<UPlatformerTraversalMovementComponent>(ACharacter::CharacterMovementComponentName))
+	: Super(ObjectInitializer.SetDefaultSubobjectClass<UDragonDashMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	PrimaryActorTick.bCanEverTick = true;
 	TraversalComponent = CreateDefaultSubobject<UPlatformerTraversalComponent>(TEXT("TraversalComponent"));
@@ -61,12 +57,6 @@ APlayableDragonCharacter::APlayableDragonCharacter(const FObjectInitializer& Obj
 		GetCharacterMovement()->bOrientRotationToMovement = false;
 		GetCharacterMovement()->bUseControllerDesiredRotation = false;
 		GetCharacterMovement()->RotationRate = FRotator(0.0f, 720.0f, 0.0f);
-	}
-
-	static ConstructorHelpers::FObjectFinder<UInputAction> LookActionAsset(DefaultLookActionPath);
-	if (LookActionAsset.Succeeded())
-	{
-		LookAction = LookActionAsset.Object;
 	}
 }
 
@@ -90,48 +80,9 @@ UPlatformerTraversalMovementComponent* APlayableDragonCharacter::GetTraversalMov
 	return Cast<UPlatformerTraversalMovementComponent>(GetCharacterMovement());
 }
 
-TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveDashAbilityClass() const
+UDragonDashMovementComponent* APlayableDragonCharacter::GetDragonDashMovementComponent() const
 {
-	TSubclassOf<UGameplayAbility> ResolvedDashAbilityClass = DashAbilityClass;
-	if (!ResolvedDashAbilityClass)
-	{
-		ResolvedDashAbilityClass = UGA_PlatformerDash::StaticClass();
-	}
-
-	return ResolvedDashAbilityClass;
-}
-
-TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveBaseShotAbilityClass() const
-{
-	TSubclassOf<UGameplayAbility> ResolvedBaseShotAbilityClass = BaseShotAbilityClass;
-	if (!ResolvedBaseShotAbilityClass)
-	{
-		ResolvedBaseShotAbilityClass = UGA_DragonBaseShot::StaticClass();
-	}
-
-	return ResolvedBaseShotAbilityClass;
-}
-
-TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveChargeShotAbilityClass() const
-{
-	TSubclassOf<UGameplayAbility> ResolvedChargeShotAbilityClass = ChargeShotAbilityClass;
-	if (!ResolvedChargeShotAbilityClass)
-	{
-		ResolvedChargeShotAbilityClass = UGA_DragonChargeShot::StaticClass();
-	}
-
-	return ResolvedChargeShotAbilityClass;
-}
-
-TSubclassOf<UGameplayAbility> APlayableDragonCharacter::ResolveHitReactionAbilityClass() const
-{
-	TSubclassOf<UGameplayAbility> ResolvedHitReactionAbilityClass = HitReactionAbilityClass;
-	if (!ResolvedHitReactionAbilityClass)
-	{
-		ResolvedHitReactionAbilityClass = UGA_HitReaction::StaticClass();
-	}
-
-	return ResolvedHitReactionAbilityClass;
+	return Cast<UDragonDashMovementComponent>(GetCharacterMovement());
 }
 
 void APlayableDragonCharacter::BeginPlay()
@@ -146,17 +97,17 @@ void APlayableDragonCharacter::BeginPlay()
 
 	if (UPlatformerTraversalComponent* CharacterTraversalComponent = GetTraversalComponent())
 	{
-		if (!CharacterTraversalComponent->GetTraversalConfig() && TraversalConfig)
-		{
-			CharacterTraversalComponent->SetTraversalConfig(TraversalConfig);
-		}
-
 		CharacterTraversalComponent->ApplyTraversalSettings();
 	}
 
 	if (!GetTraversalMovementComponent())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("PlayableDragonCharacter requires UPlatformerTraversalMovementComponent. Reload or recompile BP_DragonCharacter so the redirected movement component class is applied."));
+	}
+
+	if (UDragonDashMovementComponent* DragonDashMovementComponent = GetDragonDashMovementComponent())
+	{
+		DragonDashMovementComponent->SetDragonDashConfig(DragonDashConfig);
 	}
 	
 	if (const USideViewMovementComponent* SideViewMovementComponent = GetSideViewMovementComponent())
@@ -179,25 +130,6 @@ void APlayableDragonCharacter::PossessedBy(AController* NewController)
 		PC->SetInputMode(InputMode);
 		PC->SetShowMouseCursor(false);
 	}
-	
-	// Grant temporary abilities for testing abilities
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (HasAuthority())
-		{
-			const TSubclassOf<UGameplayAbility> ResolvedDashAbilityClass = ResolveDashAbilityClass();
-			const TSubclassOf<UGameplayAbility> ResolvedBaseShotAbilityClass = ResolveBaseShotAbilityClass();
-			const TSubclassOf<UGameplayAbility> ResolvedChargeShotAbilityClass = ResolveChargeShotAbilityClass();
-			const TSubclassOf<UGameplayAbility> ResolvedHitReactionAbilityClass = ResolveHitReactionAbilityClass();
-
-			if (ResolvedDashAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedDashAbilityClass, 1, INDEX_NONE, this));
-			if (JumpAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(JumpAbilityClass, 1, INDEX_NONE, this));
-			if (CrouchAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(CrouchAbilityClass, 1, INDEX_NONE, this));
-			if (ResolvedBaseShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedBaseShotAbilityClass, 1, INDEX_NONE, this));
-			if (ResolvedChargeShotAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedChargeShotAbilityClass, 1, INDEX_NONE, this));
-			if (ResolvedHitReactionAbilityClass) ASC->GiveAbility(FGameplayAbilitySpec(ResolvedHitReactionAbilityClass, 1, INDEX_NONE, this));
-		}
-	}
 }
 
 void APlayableDragonCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -208,40 +140,51 @@ void APlayableDragonCharacter::SetupPlayerInputComponent(UInputComponent* Player
 	{
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
-			if (DefaultMappingContext)
+			if (InputConfig)
 			{
-				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+				for (UInputMappingContext* MappingContext : InputConfig->MappingContexts)
+				{
+					if (MappingContext)
+					{
+						Subsystem->AddMappingContext(MappingContext, InputConfig->MappingContextPriority);
+					}
+				}
 			}
 		}
 	}
 
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		if (MoveAction)
+		if (UInputAction* MoveAction = GetInputAction(PlatformerGameplayTags::Input_Move))
 		{
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &APlayableDragonCharacter::Input_Move);
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_Move);
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_Move);
 		}
-		if (UInputAction* ResolvedLookAction = ResolveLookAction())
+		if (UInputAction* LookAction = GetInputAction(PlatformerGameplayTags::Input_Look))
 		{
-			EnhancedInputComponent->BindAction(ResolvedLookAction, ETriggerEvent::Triggered, this, &APlayableDragonCharacter::Input_Look);
-			EnhancedInputComponent->BindAction(ResolvedLookAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_Look);
-			EnhancedInputComponent->BindAction(ResolvedLookAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_Look);
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &APlayableDragonCharacter::Input_Look);
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_Look);
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_Look);
 		}
-		if (JumpAction) {
+		if (UInputAction* JumpAction = GetInputAction(PlatformerGameplayTags::Input_Ability_Jump)) {
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_JumpStart);
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_JumpEnd);
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_JumpEnd);
 		}
-		if (DashAction) EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_Dash);
-		if (CrouchAction)
+		if (UInputAction* DashAction = GetInputAction(PlatformerGameplayTags::Input_Ability_Dash))
+		{
+			EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_Dash);
+		}
+		if (UInputAction* CrouchAction = GetInputAction(PlatformerGameplayTags::Input_Ability_Crouch))
 		{
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_CrouchStart);
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_CrouchEnd);
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_CrouchEnd);
 		}
 		
+		UInputAction* BaseShotAction = GetInputAction(PlatformerGameplayTags::Input_Ability_BaseShot);
+		UInputAction* ChargeShotAction = GetInputAction(PlatformerGameplayTags::Input_Ability_ChargeShot);
 		if (BaseShotAction && (!bUseUnifiedShotInput || !ChargeShotAction))
 		{
 			EnhancedInputComponent->BindAction(BaseShotAction, ETriggerEvent::Triggered, this, &APlayableDragonCharacter::Input_BaseShot);
@@ -255,8 +198,11 @@ void APlayableDragonCharacter::SetupPlayerInputComponent(UInputComponent* Player
 			EnhancedInputComponent->BindAction(ChargeShotAction, ETriggerEvent::Canceled, this, &APlayableDragonCharacter::Input_ChargeShotEnd);
 		}
 
-		if (FlyAction) EnhancedInputComponent->BindAction(FlyAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_FlyToggle);
-		if (GlideAction) {
+		if (UInputAction* FlyAction = GetInputAction(PlatformerGameplayTags::Input_Fly))
+		{
+			EnhancedInputComponent->BindAction(FlyAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_FlyToggle);
+		}
+		if (UInputAction* GlideAction = GetInputAction(PlatformerGameplayTags::Input_Glide)) {
 			EnhancedInputComponent->BindAction(GlideAction, ETriggerEvent::Started, this, &APlayableDragonCharacter::Input_GlideStart);
 			EnhancedInputComponent->BindAction(GlideAction, ETriggerEvent::Completed, this, &APlayableDragonCharacter::Input_GlideEnd);
 		}
@@ -490,14 +436,9 @@ void APlayableDragonCharacter::Input_Look(const FInputActionValue& Value)
 	HandleLadderClimbInput(VerticalLookInput, LadderLookInputThreshold);
 }
 
-UInputAction* APlayableDragonCharacter::ResolveLookAction()
+UInputAction* APlayableDragonCharacter::GetInputAction(const FGameplayTag& InputTag) const
 {
-	if (!LookAction)
-	{
-		LookAction = LoadObject<UInputAction>(nullptr, DefaultLookActionPath);
-	}
-
-	return LookAction;
+	return InputConfig ? InputConfig->FindInputAction(InputTag) : nullptr;
 }
 
 void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
@@ -517,6 +458,11 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 
 	if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
 	{
+		if (UDragonDashMovementComponent* DragonDashMovementComponent = GetDragonDashMovementComponent())
+		{
+			DragonDashMovementComponent->CancelDragonDashForJump();
+		}
+
 		const bool bWasDashing = TraversalMovementComponent->IsDashing();
 		if (TraversalMovementComponent->HandleTraversalJumpPressed())
 		{
@@ -554,19 +500,7 @@ void APlayableDragonCharacter::Input_JumpStart(const FInputActionValue& Value)
 		}
 	}
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		// Try to activate Jump Ability if granted
-		if (JumpAbilityClass)
-		{
-			ASC->TryActivateAbilityByClass(JumpAbilityClass);
-		}
-		else
-		{
-			// Fallback to native jump
-			Jump();
-		}
-	}
+	TryActivateAbilityByInputTag(PlatformerGameplayTags::Input_Ability_Jump);
 }
 
 void APlayableDragonCharacter::Input_JumpEnd(const FInputActionValue& Value)
@@ -590,19 +524,7 @@ void APlayableDragonCharacter::Input_JumpEnd(const FInputActionValue& Value)
 		return;
 	}
 
-	// Tell GAS that the jump key was released so UGA_PlatformerJump can call EndAbility()
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (JumpAbilityClass)
-		{
-			if (FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(JumpAbilityClass))
-			{
-				ASC->AbilitySpecInputReleased(*Spec);
-			}
-		}
-	}
-
-	StopJumping();
+	ReleaseAbilityInputTag(PlatformerGameplayTags::Input_Ability_Jump);
 }
 
 void APlayableDragonCharacter::Input_Dash(const FInputActionValue& Value)
@@ -612,13 +534,7 @@ void APlayableDragonCharacter::Input_Dash(const FInputActionValue& Value)
 		return;
 	}
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (const TSubclassOf<UGameplayAbility> ResolvedDashAbilityClass = ResolveDashAbilityClass())
-		{
-			ASC->TryActivateAbilityByClass(ResolvedDashAbilityClass);
-		}
-	}
+	TryActivateAbilityByInputTag(PlatformerGameplayTags::Input_Ability_Dash);
 }
 
 void APlayableDragonCharacter::Input_CrouchStart(const FInputActionValue& Value)
@@ -675,16 +591,7 @@ void APlayableDragonCharacter::BeginCrouchRequest(const FInputActionValue& Value
 		}
 	}
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (CrouchAbilityClass)
-		{
-			ASC->TryActivateAbilityByClass(CrouchAbilityClass);
-			return;
-		}
-	}
-
-	Crouch();
+	TryActivateAbilityByInputTag(PlatformerGameplayTags::Input_Ability_Crouch);
 }
 
 void APlayableDragonCharacter::EndCrouchRequest(const FInputActionValue& Value)
@@ -703,19 +610,7 @@ void APlayableDragonCharacter::EndCrouchRequest(const FInputActionValue& Value)
 		return;
 	}
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (CrouchAbilityClass)
-		{
-			if (FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(CrouchAbilityClass))
-			{
-				ASC->AbilitySpecInputReleased(*Spec);
-			}
-			return;
-		}
-	}
-
-	UnCrouch();
+	ReleaseAbilityInputTag(PlatformerGameplayTags::Input_Ability_Crouch);
 }
 
 void APlayableDragonCharacter::Input_BaseShot(const FInputActionValue& Value)
@@ -725,18 +620,12 @@ void APlayableDragonCharacter::Input_BaseShot(const FInputActionValue& Value)
 		return;
 	}
 
-	if (bUseUnifiedShotInput && ChargeShotAction)
+	if (bUseUnifiedShotInput && GetInputAction(PlatformerGameplayTags::Input_Ability_ChargeShot))
 	{
 		return;
 	}
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (const TSubclassOf<UGameplayAbility> ResolvedBaseShotAbilityClass = ResolveBaseShotAbilityClass())
-		{
-			ASC->TryActivateAbilityByClass(ResolvedBaseShotAbilityClass);
-		}
-	}
+	TryActivateAbilityByInputTag(PlatformerGameplayTags::Input_Ability_BaseShot);
 }
 
 void APlayableDragonCharacter::Input_ChargeShotStart(const FInputActionValue& Value)
@@ -753,13 +642,7 @@ void APlayableDragonCharacter::Input_ChargeShotStart(const FInputActionValue& Va
 
 	bChargeShotInputHeld = true;
 
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (const TSubclassOf<UGameplayAbility> ResolvedChargeShotAbilityClass = ResolveChargeShotAbilityClass())
-		{
-			ASC->TryActivateAbilityByClass(ResolvedChargeShotAbilityClass);
-		}
-	}
+	TryActivateAbilityByInputTag(PlatformerGameplayTags::Input_Ability_ChargeShot);
 }
 
 void APlayableDragonCharacter::Input_ChargeShotEnd(const FInputActionValue& Value)
@@ -775,17 +658,7 @@ void APlayableDragonCharacter::Input_ChargeShotEnd(const FInputActionValue& Valu
 		return;
 	}
 
-	// Tell GA_DragonChargeShot to release and fire
-	if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
-	{
-		if (const TSubclassOf<UGameplayAbility> ResolvedChargeShotAbilityClass = ResolveChargeShotAbilityClass())
-		{
-			if (FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(ResolvedChargeShotAbilityClass))
-			{
-				ASC->AbilitySpecInputReleased(*Spec);
-			}
-		}
-	}
+	ReleaseAbilityInputTag(PlatformerGameplayTags::Input_Ability_ChargeShot);
 }
 
 void APlayableDragonCharacter::Input_FlyToggle(const FInputActionValue& Value)

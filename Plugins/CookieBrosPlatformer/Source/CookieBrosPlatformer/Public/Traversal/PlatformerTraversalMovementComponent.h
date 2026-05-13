@@ -42,9 +42,6 @@ public:
 	UFUNCTION(BlueprintPure, Category="Traversal")
 	bool IsTraversalEnabled() const { return bTraversalEnabled; }
 
-	void SetDefaultLedgeSettings(const FPlatformerLedgeTraversalSettings& InSettings);
-	void SetDefaultDashSettings(const FPlatformerDashSettings& InSettings);
-	void SetDefaultWallSettings(const FPlatformerWallTraversalSettings& InSettings);
 	void SetDeveloperTraversalSettingsOverride(
 		const FPlatformerLedgeTraversalSettings& InLedgeSettings,
 		const FPlatformerDashSettings& InDashSettings,
@@ -183,9 +180,6 @@ private:
 
 	FVector2D TraversalInputVector = FVector2D::ZeroVector;
 	EPlatformerTraversalState TraversalState = EPlatformerTraversalState::None;
-	FPlatformerLedgeTraversalSettings DefaultLedgeSettings;
-	FPlatformerDashSettings DefaultDashSettings;
-	FPlatformerWallTraversalSettings DefaultWallSettings;
 	bool bHasDeveloperTraversalSettingsOverride = false;
 	FPlatformerLedgeTraversalSettings DeveloperLedgeSettingsOverride;
 	FPlatformerDashSettings DeveloperDashSettingsOverride;

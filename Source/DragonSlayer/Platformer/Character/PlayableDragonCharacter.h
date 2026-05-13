@@ -2,16 +2,16 @@
 
 #include "CoreMinimal.h"
 #include "Character/DragonCharacter.h"
-#include "GameplayTagContainer.h"
 #include "PlayableDragonCharacter.generated.h"
 
 class UInputAction;
-class UInputMappingContext;
+struct FGameplayTag;
 struct FInputActionValue;
-class UGameplayAbility;
 class APlatformerLadder;
 class UDragonFormComponent;
-class UPlatformerTraversalConfigDataAsset;
+class UDragonDashBounceDataAsset;
+class UDragonDashMovementComponent;
+class UPlatformerInputConfig;
 class UPlatformerTraversalComponent;
 class UPlatformerTraversalMovementComponent;
 
@@ -41,50 +41,22 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Traversal", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UPlatformerTraversalComponent> TraversalComponent;
 
-	// Enhanced Input setup
 	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputMappingContext> DefaultMappingContext;
-
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> MoveAction;
-
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> LookAction;
+	TObjectPtr<UPlatformerInputConfig> InputConfig;
 
 	UPROPERTY(EditAnywhere, Category="Input|Ladder", meta=(ClampMin="0.0"))
 	float LadderLookInputThreshold = 0.1f;
 
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> JumpAction;
-
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> DashAction;
-
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> CrouchAction;
-
-	UPROPERTY(EditAnywhere, Category="Input|Combat")
-	TObjectPtr<UInputAction> BaseShotAction;
-
-	UPROPERTY(EditAnywhere, Category="Input|Combat")
-	TObjectPtr<UInputAction> ChargeShotAction;
-
 	UPROPERTY(EditAnywhere, Category="Input|Combat")
 	bool bUseUnifiedShotInput = true;
 
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> FlyAction;
-
-	UPROPERTY(EditAnywhere, Category="Input")
-	TObjectPtr<UInputAction> GlideAction;
-
-	UPROPERTY(EditDefaultsOnly, Category="Traversal", meta=(DeprecatedProperty, DeprecationMessage="Use TraversalComponent.TraversalConfig"))
-	TObjectPtr<UPlatformerTraversalConfigDataAsset> TraversalConfig;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Traversal|Dragon Dash", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UDragonDashBounceDataAsset> DragonDashConfig;
 
 	// Input Handlers
 	void Input_Move(const FInputActionValue& Value);
 	void Input_Look(const FInputActionValue& Value);
-	UInputAction* ResolveLookAction();
+	UInputAction* GetInputAction(const FGameplayTag& InputTag) const;
 	void Input_JumpStart(const FInputActionValue& Value);
 	void Input_JumpEnd(const FInputActionValue& Value);
 	void Input_Dash(const FInputActionValue& Value);
@@ -98,14 +70,11 @@ protected:
 	void Input_FlyToggle(const FInputActionValue& Value);
 	void Input_GlideStart(const FInputActionValue& Value);
 	void Input_GlideEnd(const FInputActionValue& Value);
-	TSubclassOf<UGameplayAbility> ResolveDashAbilityClass() const;
-	TSubclassOf<UGameplayAbility> ResolveBaseShotAbilityClass() const;
-	TSubclassOf<UGameplayAbility> ResolveChargeShotAbilityClass() const;
-	TSubclassOf<UGameplayAbility> ResolveHitReactionAbilityClass() const;
 	class USideViewMovementComponent* GetSideViewMovementComponent() const;
 	class UDragonFormComponent* GetDragonFormComponent() const;
 	UPlatformerTraversalComponent* GetTraversalComponent() const;
 	UPlatformerTraversalMovementComponent* GetTraversalMovementComponent() const;
+	UDragonDashMovementComponent* GetDragonDashMovementComponent() const;
 	void ApplyDeveloperChargeShotSettings(
 		const FPlatformerChargeShotTuning& DeveloperChargeShotSettings,
 		bool bHasSavedChargeShotSettings);
@@ -114,25 +83,6 @@ protected:
 		const FPlatformerDashSettings& DeveloperDashSettings,
 		const FPlatformerWallTraversalSettings& DeveloperWallSettings,
 		bool bHasSavedTraversalSettings);
-
-	// Abilities to grant on possession for testing purposes
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> DashAbilityClass;
-
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> JumpAbilityClass;
-
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> CrouchAbilityClass;
-
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> BaseShotAbilityClass;
-
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> ChargeShotAbilityClass;
-
-	UPROPERTY(EditAnywhere, Category="Abilities|Test Setup")
-	TSubclassOf<UGameplayAbility> HitReactionAbilityClass;
 
 	// State trackers for temporary mechanics
 	bool bIsGliding;

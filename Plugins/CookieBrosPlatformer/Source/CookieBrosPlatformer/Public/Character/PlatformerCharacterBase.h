@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Developer/DeveloperPlatformerSettingsTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayTagContainer.h"
 #include "TimerManager.h"
 #include "PlatformerCharacterBase.generated.h"
 
@@ -63,6 +64,9 @@ public:
   APlatformerCharacterBase(const FObjectInitializer &ObjectInitializer);
 
   virtual void InitializeAbilities(const UPlatformerAbilitySet *AbilitySet);
+  virtual bool TryActivateAbilityByInputTag(const FGameplayTag &InputTag);
+  virtual bool ReleaseAbilityInputTag(const FGameplayTag &InputTag);
+  virtual bool HasAbilityInputTag(const FGameplayTag &InputTag) const;
   virtual void NotifyLadderAvailable(APlatformerLadder *Ladder);
   virtual void NotifyLadderUnavailable(APlatformerLadder *Ladder);
   virtual void NotifyLedgeGrabAvailable(APlatformerLedgeGrab *LedgeGrab);

@@ -7,10 +7,15 @@
 #include "Core/PlatformerDeveloperSettingsSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/PlayerController.h"
+#include "Misc/PackageName.h"
 #include "Platformer/Camera/PlatformerCameraManager.h"
+#include "Traversal/PlatformerTraversalComponent.h"
+#include "Traversal/PlatformerTraversalConfigDataAsset.h"
 #include "UI/DeveloperCheckboxWidget.h"
 #include "UI/DeveloperParameterWidget.h"
 #include "UI/DeveloperVectorWidget.h"
+#include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 
 namespace
 {
@@ -1176,6 +1181,117 @@ void UPlatformerDeveloperSettingsWidget::ApplyDeveloperSettingsSnapshotToTargets
 	}
 }
 
+void UPlatformerDeveloperSettingsWidget::BakeDeveloperTraversalSettingsToAssignedConfig(
+	const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot) const
+{
+#if WITH_EDITOR
+	if (!DeveloperSettingsSnapshot.bHasSavedTraversalSettings || !HasDeveloperTraversalWidgetBindings())
+	{
+		return;
+	}
+
+	APlatformerCharacterBase* DeveloperTargetCharacter = GetDeveloperTargetCharacter();
+	if (!DeveloperTargetCharacter)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Cannot bake developer traversal settings because no target character is available."),
+			*GetNameSafe(this));
+		return;
+	}
+
+	UPlatformerTraversalComponent* TraversalComponent =
+		DeveloperTargetCharacter->FindComponentByClass<UPlatformerTraversalComponent>();
+	if (!TraversalComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Cannot bake developer traversal settings because %s has no UPlatformerTraversalComponent."),
+			*GetNameSafe(this),
+			*GetNameSafe(DeveloperTargetCharacter));
+		return;
+	}
+
+	UPlatformerTraversalConfigDataAsset* TraversalConfig = TraversalComponent->GetTraversalConfig();
+	if (!TraversalConfig)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Cannot bake developer traversal settings because %s has no TraversalConfig assigned."),
+			*GetNameSafe(this),
+			*GetNameSafe(TraversalComponent));
+		return;
+	}
+
+	FPlatformerLedgeTraversalSettings BakedLedgeSettings =
+		DeveloperSettingsSnapshot.CharacterSettings.DeveloperLedgeSettings;
+	FPlatformerDashSettings BakedDashSettings =
+		DeveloperSettingsSnapshot.CharacterSettings.DeveloperDashSettings;
+	FPlatformerWallTraversalSettings BakedWallSettings =
+		DeveloperSettingsSnapshot.CharacterSettings.DeveloperWallSettings;
+
+	BakedLedgeSettings.bEnabled = TraversalConfig->LedgeSettings.bEnabled;
+	BakedDashSettings.bEnabled = TraversalConfig->DashSettings.bEnabled;
+	BakedWallSettings.bEnabled = TraversalConfig->WallSettings.bEnabled;
+
+	TraversalConfig->Modify();
+	TraversalConfig->LedgeSettings = BakedLedgeSettings;
+	TraversalConfig->DashSettings = BakedDashSettings;
+	TraversalConfig->WallSettings = BakedWallSettings;
+	TraversalConfig->MarkPackageDirty();
+	TraversalConfig->PostEditChange();
+
+	UPackage* ConfigPackage = TraversalConfig->GetOutermost();
+	if (!ConfigPackage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Baked traversal settings into %s, but could not resolve its package for saving."),
+			*GetNameSafe(this),
+			*GetNameSafe(TraversalConfig));
+		TraversalComponent->ApplyTraversalSettings();
+		return;
+	}
+
+	ConfigPackage->MarkPackageDirty();
+
+	const FString PackageName = ConfigPackage->GetName();
+	if (!FPackageName::IsValidLongPackageName(PackageName))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Baked traversal settings into %s, but package %s is not a valid content package for saving."),
+			*GetNameSafe(this),
+			*GetNameSafe(TraversalConfig),
+			*PackageName);
+		TraversalComponent->ApplyTraversalSettings();
+		return;
+	}
+
+	const FString PackageFilename = FPackageName::LongPackageNameToFilename(
+		PackageName,
+		FPackageName::GetAssetPackageExtension());
+	FSavePackageArgs SaveArgs;
+	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	SaveArgs.SaveFlags = SAVE_NoError;
+
+	const bool bSavedConfigPackage = UPackage::SavePackage(
+		ConfigPackage,
+		TraversalConfig,
+		*PackageFilename,
+		SaveArgs);
+
+	if (bSavedConfigPackage)
+	{
+		UE_LOG(LogTemp, Log, TEXT("%s: Baked developer traversal settings into %s and saved %s."),
+			*GetNameSafe(this),
+			*GetNameSafe(TraversalConfig),
+			*PackageFilename);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: Baked developer traversal settings into %s, but saving %s failed."),
+			*GetNameSafe(this),
+			*GetNameSafe(TraversalConfig),
+			*PackageFilename);
+	}
+
+	TraversalComponent->ApplyTraversalSettings();
+#else
+	(void)DeveloperSettingsSnapshot;
+#endif
+}
+
 APlatformerCharacterBase* UPlatformerDeveloperSettingsWidget::GetDeveloperTargetCharacter() const
 {
 	if (APlayerController* OwningPlayerController = GetOwningPlayer())
@@ -1407,6 +1523,7 @@ void UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveClicked()
 	if (DeveloperSettingsSubsystem->SaveCurrent(WorkingCopy))
 	{
 		ApplyDeveloperSettingsSnapshotToTargets(WorkingCopy);
+		BakeDeveloperTraversalSettingsToAssignedConfig(WorkingCopy);
 		RefreshDeveloperSlotWidgets();
 	}
 }
@@ -1425,6 +1542,7 @@ void UPlatformerDeveloperSettingsWidget::HandleDeveloperSaveAsClicked()
 	if (DeveloperSettingsSubsystem->SaveAs(GetRequestedDeveloperSlotName(), WorkingCopy, SavedSlot))
 	{
 		ApplyDeveloperSettingsSnapshotToTargets(WorkingCopy);
+		BakeDeveloperTraversalSettingsToAssignedConfig(WorkingCopy);
 		RefreshDeveloperSlotWidgets();
 	}
 }

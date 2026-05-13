@@ -38,7 +38,8 @@ bool UGA_PlatformerDash::CanActivateAbility(
 
 	const UPlatformerTraversalMovementComponent* TraversalMovementComponent =
 		Character ? Cast<UPlatformerTraversalMovementComponent>(Character->GetCharacterMovement()) : nullptr;
-	return TraversalMovementComponent && Character->GetCharacterMovement()->IsMovingOnGround();
+	return TraversalMovementComponent
+		&& (bAllowAirDash || Character->GetCharacterMovement()->IsMovingOnGround());
 }
 
 void UGA_PlatformerDash::ActivateAbility(

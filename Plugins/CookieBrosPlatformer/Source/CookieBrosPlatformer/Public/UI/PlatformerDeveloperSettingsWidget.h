@@ -296,6 +296,7 @@ protected:
 	FPlatformerWallTraversalSettings BuildDeveloperWallSettingsFromWidgets(
 		const FPlatformerWallTraversalSettings& BaseDeveloperWallSettings) const;
 	void ApplyDeveloperSettingsSnapshotToTargets(const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot) const;
+	void BakeDeveloperTraversalSettingsToAssignedConfig(const FPlatformerDeveloperSettingsSnapshot& DeveloperSettingsSnapshot) const;
 	APlatformerCharacterBase* GetDeveloperTargetCharacter() const;
 	APlatformerCameraManager* GetDeveloperTargetCameraManager() const;
 	UPlatformerDeveloperSettingsSubsystem* GetDeveloperSettingsSubsystem() const;

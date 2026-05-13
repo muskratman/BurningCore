@@ -78,6 +78,10 @@ It contains:
 - `DeveloperDashSettings`
 - `DeveloperWallSettings`
 
+Developer traversal settings are runtime tuning overrides. Character archetype availability remains owned by `UPlatformerTraversalConfigDataAsset`: `UPlatformerTraversalComponent` preserves the config asset's `bEnabled` flags for ledge, dash, and wall traversal when resolving developer overrides, so saved developer slots cannot silently re-enable a disabled mechanic.
+
+In editor builds, `UPlatformerDeveloperSettingsWidget` also bakes traversal tuning into the assigned traversal config when the existing Save or Save As action succeeds. The target is resolved from the current developer target character by finding its `UPlatformerTraversalComponent` and using that component's `TraversalConfig`. The bake writes ledge, dash, and wall tuning values from the working developer snapshot into the data asset, preserves the asset's current `bEnabled` flags, marks the package dirty, and saves the `.uasset`. This path is editor-only and does not exist in shipping runtime behavior.
+
 `DeveloperLedgeSettings` is `FPlatformerLedgeTraversalSettings`. Its widget bindings live in the `Ledge_*` section of `UPlatformerDeveloperSettingsWidget`, including:
 
 - `Ledge_DetectionDistance`

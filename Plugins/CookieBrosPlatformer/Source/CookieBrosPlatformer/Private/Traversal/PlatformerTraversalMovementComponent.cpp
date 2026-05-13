@@ -16,6 +16,39 @@ namespace PlatformerTraversalPrivate
 	constexpr float VerticalWallNormalThreshold = 0.2f;
 	constexpr float FloorStandTolerance = 2.0f;
 
+	const FPlatformerLedgeTraversalSettings& DisabledLedgeSettings()
+	{
+		static const FPlatformerLedgeTraversalSettings Settings = []()
+		{
+			FPlatformerLedgeTraversalSettings DisabledSettings;
+			DisabledSettings.bEnabled = false;
+			return DisabledSettings;
+		}();
+		return Settings;
+	}
+
+	const FPlatformerDashSettings& DisabledDashSettings()
+	{
+		static const FPlatformerDashSettings Settings = []()
+		{
+			FPlatformerDashSettings DisabledSettings;
+			DisabledSettings.bEnabled = false;
+			return DisabledSettings;
+		}();
+		return Settings;
+	}
+
+	const FPlatformerWallTraversalSettings& DisabledWallSettings()
+	{
+		static const FPlatformerWallTraversalSettings Settings = []()
+		{
+			FPlatformerWallTraversalSettings DisabledSettings;
+			DisabledSettings.bEnabled = false;
+			return DisabledSettings;
+		}();
+		return Settings;
+	}
+
 	bool IsTraversalBlockingSurfaceHit(const FHitResult& Hit)
 	{
 		const UPrimitiveComponent* HitComponent = Hit.GetComponent();
@@ -116,11 +149,6 @@ void UPlatformerTraversalMovementComponent::OnMovementModeChanged(EMovementMode 
 void UPlatformerTraversalMovementComponent::SetTraversalConfig(UPlatformerTraversalConfigDataAsset* InTraversalConfig)
 {
 	TraversalConfig = InTraversalConfig;
-
-	if (TraversalConfig)
-	{
-		bTraversalEnabled = true;
-	}
 }
 
 void UPlatformerTraversalMovementComponent::SetTraversalEnabled(bool bInTraversalEnabled)
@@ -135,21 +163,6 @@ void UPlatformerTraversalMovementComponent::SetTraversalEnabled(bool bInTraversa
 	{
 		CancelTraversal();
 	}
-}
-
-void UPlatformerTraversalMovementComponent::SetDefaultLedgeSettings(const FPlatformerLedgeTraversalSettings& InSettings)
-{
-	DefaultLedgeSettings = InSettings;
-}
-
-void UPlatformerTraversalMovementComponent::SetDefaultDashSettings(const FPlatformerDashSettings& InSettings)
-{
-	DefaultDashSettings = InSettings;
-}
-
-void UPlatformerTraversalMovementComponent::SetDefaultWallSettings(const FPlatformerWallTraversalSettings& InSettings)
-{
-	DefaultWallSettings = InSettings;
 }
 
 void UPlatformerTraversalMovementComponent::SetDeveloperTraversalSettingsOverride(
@@ -635,7 +648,7 @@ const FPlatformerLedgeTraversalSettings& UPlatformerTraversalMovementComponent::
 		return DeveloperLedgeSettingsOverride;
 	}
 
-	return TraversalConfig ? TraversalConfig->LedgeSettings : DefaultLedgeSettings;
+	return TraversalConfig ? TraversalConfig->LedgeSettings : PlatformerTraversalPrivate::DisabledLedgeSettings();
 }
 
 const FPlatformerDashSettings& UPlatformerTraversalMovementComponent::GetDashSettings() const
@@ -645,7 +658,7 @@ const FPlatformerDashSettings& UPlatformerTraversalMovementComponent::GetDashSet
 		return DeveloperDashSettingsOverride;
 	}
 
-	return TraversalConfig ? TraversalConfig->DashSettings : DefaultDashSettings;
+	return TraversalConfig ? TraversalConfig->DashSettings : PlatformerTraversalPrivate::DisabledDashSettings();
 }
 
 const FPlatformerWallTraversalSettings& UPlatformerTraversalMovementComponent::GetWallSettings() const
@@ -655,7 +668,7 @@ const FPlatformerWallTraversalSettings& UPlatformerTraversalMovementComponent::G
 		return DeveloperWallSettingsOverride;
 	}
 
-	return TraversalConfig ? TraversalConfig->WallSettings : DefaultWallSettings;
+	return TraversalConfig ? TraversalConfig->WallSettings : PlatformerTraversalPrivate::DisabledWallSettings();
 }
 
 bool UPlatformerTraversalMovementComponent::ShouldUseFallingTraversal() const

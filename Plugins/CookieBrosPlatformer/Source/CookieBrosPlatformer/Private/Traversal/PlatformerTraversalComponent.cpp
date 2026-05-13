@@ -4,6 +4,57 @@
 #include "Traversal/PlatformerTraversalConfigDataAsset.h"
 #include "Traversal/PlatformerTraversalMovementComponent.h"
 
+namespace
+{
+FPlatformerLedgeTraversalSettings MakeDisabledLedgeSettings()
+{
+	FPlatformerLedgeTraversalSettings Settings;
+	Settings.bEnabled = false;
+	return Settings;
+}
+
+FPlatformerDashSettings MakeDisabledDashSettings()
+{
+	FPlatformerDashSettings Settings;
+	Settings.bEnabled = false;
+	return Settings;
+}
+
+FPlatformerWallTraversalSettings MakeDisabledWallSettings()
+{
+	FPlatformerWallTraversalSettings Settings;
+	Settings.bEnabled = false;
+	return Settings;
+}
+
+FPlatformerLedgeTraversalSettings PreserveLedgeAvailability(
+	const FPlatformerLedgeTraversalSettings& Settings,
+	const UPlatformerTraversalConfigDataAsset* TraversalConfig)
+{
+	FPlatformerLedgeTraversalSettings ResolvedSettings = Settings;
+	ResolvedSettings.bEnabled = TraversalConfig ? TraversalConfig->LedgeSettings.bEnabled : false;
+	return ResolvedSettings;
+}
+
+FPlatformerDashSettings PreserveDashAvailability(
+	const FPlatformerDashSettings& Settings,
+	const UPlatformerTraversalConfigDataAsset* TraversalConfig)
+{
+	FPlatformerDashSettings ResolvedSettings = Settings;
+	ResolvedSettings.bEnabled = TraversalConfig ? TraversalConfig->DashSettings.bEnabled : false;
+	return ResolvedSettings;
+}
+
+FPlatformerWallTraversalSettings PreserveWallAvailability(
+	const FPlatformerWallTraversalSettings& Settings,
+	const UPlatformerTraversalConfigDataAsset* TraversalConfig)
+{
+	FPlatformerWallTraversalSettings ResolvedSettings = Settings;
+	ResolvedSettings.bEnabled = TraversalConfig ? TraversalConfig->WallSettings.bEnabled : false;
+	return ResolvedSettings;
+}
+}
+
 UPlatformerTraversalComponent::UPlatformerTraversalComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
@@ -61,17 +112,25 @@ void UPlatformerTraversalComponent::ApplyTraversalSettings()
 {
 	if (UPlatformerTraversalMovementComponent* TraversalMovementComponent = GetTraversalMovementComponent())
 	{
+		if (!TraversalConfig)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: TraversalConfig is not assigned on %s. Traversal is disabled until a UPlatformerTraversalConfigDataAsset is configured."),
+				*GetNameSafe(this),
+				*GetNameSafe(GetOwner()));
+			TraversalMovementComponent->SetTraversalConfig(nullptr);
+			TraversalMovementComponent->ClearDeveloperTraversalSettingsOverride();
+			TraversalMovementComponent->SetTraversalEnabled(false);
+			return;
+		}
+
 		TraversalMovementComponent->SetTraversalConfig(TraversalConfig);
-		TraversalMovementComponent->SetDefaultLedgeSettings(DefaultLedgeSettings);
-		TraversalMovementComponent->SetDefaultDashSettings(DefaultDashSettings);
-		TraversalMovementComponent->SetDefaultWallSettings(DefaultWallSettings);
 
 		if (bHasDeveloperTraversalSettingsOverride)
 		{
 			TraversalMovementComponent->SetDeveloperTraversalSettingsOverride(
-				DeveloperLedgeSettingsOverride,
-				DeveloperDashSettingsOverride,
-				DeveloperWallSettingsOverride);
+				GetResolvedLedgeSettings(),
+				GetResolvedDashSettings(),
+				GetResolvedWallSettings());
 		}
 		else
 		{
@@ -86,28 +145,28 @@ FPlatformerLedgeTraversalSettings UPlatformerTraversalComponent::GetResolvedLedg
 {
 	if (bHasDeveloperTraversalSettingsOverride)
 	{
-		return DeveloperLedgeSettingsOverride;
+		return PreserveLedgeAvailability(DeveloperLedgeSettingsOverride, TraversalConfig);
 	}
 
-	return TraversalConfig ? TraversalConfig->LedgeSettings : DefaultLedgeSettings;
+	return TraversalConfig ? TraversalConfig->LedgeSettings : MakeDisabledLedgeSettings();
 }
 
 FPlatformerDashSettings UPlatformerTraversalComponent::GetResolvedDashSettings() const
 {
 	if (bHasDeveloperTraversalSettingsOverride)
 	{
-		return DeveloperDashSettingsOverride;
+		return PreserveDashAvailability(DeveloperDashSettingsOverride, TraversalConfig);
 	}
 
-	return TraversalConfig ? TraversalConfig->DashSettings : DefaultDashSettings;
+	return TraversalConfig ? TraversalConfig->DashSettings : MakeDisabledDashSettings();
 }
 
 FPlatformerWallTraversalSettings UPlatformerTraversalComponent::GetResolvedWallSettings() const
 {
 	if (bHasDeveloperTraversalSettingsOverride)
 	{
-		return DeveloperWallSettingsOverride;
+		return PreserveWallAvailability(DeveloperWallSettingsOverride, TraversalConfig);
 	}
 
-	return TraversalConfig ? TraversalConfig->WallSettings : DefaultWallSettings;
+	return TraversalConfig ? TraversalConfig->WallSettings : MakeDisabledWallSettings();
 }

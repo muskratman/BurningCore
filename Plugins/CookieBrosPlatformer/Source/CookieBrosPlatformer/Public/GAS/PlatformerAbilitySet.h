@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "GameplayAbilitySpec.h"
 #include "PlatformerAbilitySet.generated.h"
 
@@ -18,6 +19,10 @@ struct FPlatformerAbilitySet_Ability
 
 	UPROPERTY(EditDefaultsOnly)
 	int32 AbilityLevel = 1;
+
+	/** Optional input tag used by character/controller input glue to activate or release this granted ability. */
+	UPROPERTY(EditDefaultsOnly, Category="Input")
+	FGameplayTag InputTag;
 };
 
 USTRUCT(BlueprintType)

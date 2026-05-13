@@ -135,11 +135,13 @@ Source/DragonSlayer/
 
 - `APlatformerCharacterBase` дає camera rig, side-view movement shell, combat/bootstrap і developer settings hooks.
 - `ADragonCharacter` додає hero-specific компоненти: `UDragonFormComponent` і `UDragonOverdriveComponent`.
-- `APlayableDragonCharacter` підключає current production input, traversal component і gameplay glue для playable build.
+- `APlayableDragonCharacter` підключає current production input config, traversal component і gameplay glue для playable build.
 
 ### GAS
 
 - reusable платформа вже містить base abilities / attributes / ability-set infrastructure;
+- `UPlatformerAbilitySet` controls granted playable abilities and optional input tags; playable input activates/release granted specs by `Input.Ability.*` tags, so removing an ability entry disables that action instead of falling back to native character calls;
+- `UPlatformerInputConfig` owns Enhanced Input mapping contexts and `InputTag -> UInputAction` bindings for both non-ability input (`Input.Move`, `Input.Look`, etc.) and ability input (`Input.Ability.*`);
 - `Source/DragonSlayer/GAS` додає Dragon-specific shot, charge shot, form switch, hit reaction, overdrive activation;
 - damage, combat states і tuning проходять через GAS/DataAssets, а не через hardcoded UI logic.
 

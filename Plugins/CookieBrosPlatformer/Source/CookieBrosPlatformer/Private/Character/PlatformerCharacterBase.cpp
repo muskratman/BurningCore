@@ -129,9 +129,14 @@ void APlatformerCharacterBase::InitializeAbilities(
   for (const FPlatformerAbilitySet_Ability &AbilityData :
        AbilitySet->Abilities) {
     if (AbilityData.AbilityClass) {
-      AbilitySystemComponent->GiveAbility(
-          FGameplayAbilitySpec(AbilityData.AbilityClass,
-                               AbilityData.AbilityLevel, INDEX_NONE, this));
+      FGameplayAbilitySpec AbilitySpec(AbilityData.AbilityClass,
+                                       AbilityData.AbilityLevel, INDEX_NONE,
+                                       this);
+      if (AbilityData.InputTag.IsValid()) {
+        AbilitySpec.GetDynamicSpecSourceTags().AddTag(AbilityData.InputTag);
+      }
+
+      AbilitySystemComponent->GiveAbility(AbilitySpec);
     }
   }
 
@@ -152,6 +157,61 @@ void APlatformerCharacterBase::InitializeAbilities(
           *EffectSpec.Data.Get());
     }
   }
+}
+
+bool APlatformerCharacterBase::TryActivateAbilityByInputTag(
+    const FGameplayTag &InputTag) {
+  if (!AbilitySystemComponent || !InputTag.IsValid()) {
+    return false;
+  }
+
+  bool bActivatedAbility = false;
+  TArray<FGameplayAbilitySpec> &ActivatableAbilities =
+      AbilitySystemComponent->GetActivatableAbilities();
+  for (FGameplayAbilitySpec &AbilitySpec : ActivatableAbilities) {
+    if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) {
+      bActivatedAbility |=
+          AbilitySystemComponent->TryActivateAbility(AbilitySpec.Handle);
+    }
+  }
+
+  return bActivatedAbility;
+}
+
+bool APlatformerCharacterBase::ReleaseAbilityInputTag(
+    const FGameplayTag &InputTag) {
+  if (!AbilitySystemComponent || !InputTag.IsValid()) {
+    return false;
+  }
+
+  bool bReleasedAbility = false;
+  TArray<FGameplayAbilitySpec> &ActivatableAbilities =
+      AbilitySystemComponent->GetActivatableAbilities();
+  for (FGameplayAbilitySpec &AbilitySpec : ActivatableAbilities) {
+    if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) {
+      AbilitySystemComponent->AbilitySpecInputReleased(AbilitySpec);
+      bReleasedAbility = true;
+    }
+  }
+
+  return bReleasedAbility;
+}
+
+bool APlatformerCharacterBase::HasAbilityInputTag(
+    const FGameplayTag &InputTag) const {
+  if (!AbilitySystemComponent || !InputTag.IsValid()) {
+    return false;
+  }
+
+  const TArray<FGameplayAbilitySpec> &ActivatableAbilities =
+      AbilitySystemComponent->GetActivatableAbilities();
+  for (const FGameplayAbilitySpec &AbilitySpec : ActivatableAbilities) {
+    if (AbilitySpec.GetDynamicSpecSourceTags().HasTagExact(InputTag)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void APlatformerCharacterBase::ApplyDeveloperCharacterSettings(
