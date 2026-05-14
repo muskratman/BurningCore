@@ -19,6 +19,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void RefreshBlockLayout() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Destructible Block", meta=(ClampMin=1.0))
 	float MaxHitPoints = 3.0f;

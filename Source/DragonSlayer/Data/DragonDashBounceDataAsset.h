@@ -43,8 +43,8 @@ struct FDragonDashBounceTuning
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash|Enemy", meta=(ClampMin="0.0", Units="s"))
 	float AerialDecisionWindowDuration = 0.25f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash|Enemy", meta=(ClampMin="0.0"))
-	float AerialDecisionGravityScale = 0.08f;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash|Enemy", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float AerialDecisionTimeDilation = 0.0f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Dash|Enemy", meta=(ClampMin="0.0", Units="s"))
 	float HitStopDuration = 0.06f;

@@ -214,13 +214,17 @@ void UPlatformerConveyorSettingsObject::PullFromActor(AActor* Actor)
 
 	FVector LocalVelocity = FVector::ZeroVector;
 	PlatformerSettingsPrivate::GetVectorPropertyValue(Actor, TEXT("LocalConveyorVelocity"), LocalVelocity);
-	Direction = PlatformerSettingsPrivate::ResolveDirectionOrDefault(LocalVelocity);
-	Speed = LocalVelocity.Size();
+	Direction = LocalVelocity.X < 0.0f ? FVector(-1.0f, 0.0f, 0.0f) : FVector(1.0f, 0.0f, 0.0f);
+	Speed = FMath::Abs(LocalVelocity.X);
 }
 
 void UPlatformerConveyorSettingsObject::PushToActor()
 {
-	PlatformerSettingsPrivate::SetVectorPropertyValue(GetEditedActor(), TEXT("LocalConveyorVelocity"), PlatformerSettingsPrivate::ResolveDirectionOrDefault(Direction) * FMath::Max(0.0f, Speed));
+	const float DirectionSign = Direction.X < 0.0f ? -1.0f : 1.0f;
+	PlatformerSettingsPrivate::SetVectorPropertyValue(
+		GetEditedActor(),
+		TEXT("LocalConveyorVelocity"),
+		FVector(DirectionSign * FMath::Max(0.0f, Speed), 0.0f, 0.0f));
 }
 
 void UPlatformerDangerBlockSettingsObject::PullFromActor(AActor* Actor)

@@ -1,5 +1,6 @@
 #include "Platformer/Environment/PlatformerDestructibleBlock.h"
 
+#include "Platformer/Environment/PlatformerEnvironmentHelpers.h"
 #include "TimerManager.h"
 
 APlatformerDestructibleBlock::APlatformerDestructibleBlock()
@@ -11,6 +12,18 @@ void APlatformerDestructibleBlock::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentHitPoints = FMath::Max(MaxHitPoints, 1.0f);
+}
+
+void APlatformerDestructibleBlock::RefreshBlockLayout()
+{
+	const FVector ResolvedBlockSize = BlockSize.ComponentMax(FVector(1.0f, 1.0f, 1.0f));
+
+	PlatformerEnvironment::ApplyRelativeTransform(
+		BlockMeshLayoutRoot,
+		FVector::ZeroVector,
+		FRotator::ZeroRotator,
+		ResolvedBlockSize / 100.0f,
+		BlockMeshTransformOffset);
 }
 
 void APlatformerDestructibleBlock::ApplyDamage(const FGameplayEffectSpecHandle& DamageSpec, const FHitResult& HitResult)

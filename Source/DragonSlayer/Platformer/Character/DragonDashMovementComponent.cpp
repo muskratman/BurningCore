@@ -40,6 +40,18 @@ void UDragonDashMovementComponent::TickComponent(float DeltaTime, ELevelTick Tic
 
 void UDragonDashMovementComponent::PhysCustom(float DeltaTime, int32 Iterations)
 {
+	if (DragonDashState == EDragonDashState::AerialDecision)
+	{
+		if (ActiveAerialDecisionTimeDilation <= KINDA_SMALL_NUMBER || DeltaTime <= 0.0f)
+		{
+			Velocity = FVector::ZeroVector;
+			return;
+		}
+
+		PhysFalling(DeltaTime * ActiveAerialDecisionTimeDilation, Iterations);
+		return;
+	}
+
 	if (IsDragonDashActive())
 	{
 		PhysDragonDash(DeltaTime, Iterations);
@@ -242,6 +254,11 @@ void UDragonDashMovementComponent::EnterDragonDash(
 	float Speed,
 	float Distance)
 {
+	if (DragonDashState == EDragonDashState::AerialDecision)
+	{
+		EndAerialDecisionWindow();
+	}
+
 	ActiveDashDirection = Direction.GetSafeNormal();
 	ActiveDashStartLocation = UpdatedComponent ? UpdatedComponent->GetComponentLocation() : FVector::ZeroVector;
 	ActiveDashSpeed = FMath::Max(Speed, 0.0f);
@@ -256,6 +273,7 @@ void UDragonDashMovementComponent::EnterDragonDash(
 	{
 		LastEnemyBounceTarget.Reset();
 		LastEnemyBounceIgnoreEndTime = -1.0f;
+		EnemyTargetsHitThisDash.Reset();
 	}
 
 	Velocity = ActiveDashDirection * ActiveDashSpeed;
@@ -310,37 +328,62 @@ void UDragonDashMovementComponent::EnterAerialDecisionWindow(AActor* EnemyActor)
 		return;
 	}
 
-	if (UCharacterMovementComponent* MovementComponent = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr)
+	UWorld* World = GetWorld();
+	if (!World || !CharacterOwner)
 	{
-		PreAerialDecisionGravityScale = MovementComponent->GravityScale;
-		MovementComponent->GravityScale = Tuning.AerialDecisionGravityScale;
-		bHasAerialDecisionGravityOverride = true;
+		SetDragonDashState(EDragonDashState::None);
+		SetMovementMode(MOVE_Falling);
+		return;
 	}
+
+	RestoreAerialDecisionTimeDilation();
+	World->GetTimerManager().ClearTimer(AerialDecisionTimerHandle);
+
+	ActiveAerialDecisionTimeDilation = FMath::Clamp(Tuning.AerialDecisionTimeDilation, 0.0f, 1.0f);
+	bAerialDecisionTimeDilationActive = true;
 
 	LastEnemyBounceTarget = EnemyActor;
 	LastEnemyBounceIgnoreEndTime = GetWorldTimeSafe() + EnemyRepeatHitLockout;
 	AerialDecisionWindowEndTime = GetWorldTimeSafe() + Tuning.AerialDecisionWindowDuration;
-	Velocity.Z = FMath::Max(Velocity.Z, -80.0f);
+	Velocity = FVector::ZeroVector;
 	SetDragonDashState(EDragonDashState::AerialDecision);
-	SetMovementMode(MOVE_Falling);
+	SetMovementMode(MOVE_Custom, static_cast<uint8>(EPlatformerTraversalCustomMode::Dash));
+	World->GetTimerManager().SetTimer(
+		AerialDecisionTimerHandle,
+		this,
+		&UDragonDashMovementComponent::EndAerialDecisionWindow,
+		Tuning.AerialDecisionWindowDuration,
+		false);
 }
 
 void UDragonDashMovementComponent::EndAerialDecisionWindow()
 {
-	if (bHasAerialDecisionGravityOverride)
+	if (UWorld* World = GetWorld())
 	{
-		if (UCharacterMovementComponent* MovementComponent = CharacterOwner ? CharacterOwner->GetCharacterMovement() : nullptr)
-		{
-			MovementComponent->GravityScale = PreAerialDecisionGravityScale;
-		}
-		bHasAerialDecisionGravityOverride = false;
+		World->GetTimerManager().ClearTimer(AerialDecisionTimerHandle);
 	}
 
+	RestoreAerialDecisionTimeDilation();
 	AerialDecisionWindowEndTime = -1.0f;
 	if (DragonDashState == EDragonDashState::AerialDecision)
 	{
 		SetDragonDashState(EDragonDashState::None);
+		if (MovementMode == MOVE_Custom)
+		{
+			SetMovementMode(IsMovingOnGround() ? MOVE_Walking : MOVE_Falling);
+		}
 	}
+}
+
+void UDragonDashMovementComponent::RestoreAerialDecisionTimeDilation()
+{
+	if (!bAerialDecisionTimeDilationActive)
+	{
+		return;
+	}
+
+	ActiveAerialDecisionTimeDilation = 1.0f;
+	bAerialDecisionTimeDilationActive = false;
 }
 
 void UDragonDashMovementComponent::PhysDragonDash(float DeltaTime, int32 Iterations)
@@ -351,15 +394,35 @@ void UDragonDashMovementComponent::PhysDragonDash(float DeltaTime, int32 Iterati
 		return;
 	}
 
-	if (bDashHitStopActive)
-	{
-		Velocity = FVector::ZeroVector;
-		return;
-	}
-
 	if (DeltaTime <= 0.0f)
 	{
 		FinishDragonDash(EDragonDashFinishReason::Interrupted);
+		return;
+	}
+
+	if (bDashHitStopActive)
+	{
+		ActiveDashStartTime += DeltaTime;
+
+		const float FallTimeScale = ActiveEnemyHitStopTimeDilation;
+		if (FallTimeScale <= KINDA_SMALL_NUMBER)
+		{
+			Velocity = FVector::ZeroVector;
+			return;
+		}
+
+		const float ScaledFallDeltaTime = DeltaTime * FallTimeScale;
+		Velocity.X = 0.0f;
+		Velocity.Y = 0.0f;
+		Velocity.Z += GetGravityZ() * ScaledFallDeltaTime;
+
+		FHitResult FallHit;
+		const FVector FallDelta = FVector(0.0f, 0.0f, Velocity.Z * ScaledFallDeltaTime);
+		SafeMoveUpdatedComponent(FallDelta, UpdatedComponent->GetComponentQuat(), true, FallHit);
+		if (FallHit.IsValidBlockingHit() && FallHit.Normal.Z > 0.0f)
+		{
+			Velocity.Z = 0.0f;
+		}
 		return;
 	}
 
@@ -463,6 +526,8 @@ bool UDragonDashMovementComponent::TryBounceFromHit(const FHitResult& Hit)
 	ActiveDashDistance = FMath::Max(
 		ActiveDashDistance,
 		Tuning.MinRemainingDistanceAfterBounce);
+	bActiveDashFromEnemyBounce = false;
+	bPendingAerialDecisionAfterEnemyBounce = false;
 
 	if (BounceSurface)
 	{
@@ -511,6 +576,7 @@ bool UDragonDashMovementComponent::TryHandleResolvedEnemyDashTarget(
 		return false;
 	}
 
+	RememberEnemyTargetHit(EnemyTarget);
 	EnterEnemyBounce(EnemyTarget, EnemyHit, TargetComponent);
 	return true;
 }
@@ -591,7 +657,13 @@ bool UDragonDashMovementComponent::IsValidEnemyDashTarget(AActor* TargetActor, c
 		return false;
 	}
 
-	if (TargetActor == LastEnemyBounceTarget.Get() && GetWorldTimeSafe() < LastEnemyBounceIgnoreEndTime)
+	if (HasHitEnemyTargetInCurrentDash(TargetActor))
+	{
+		return false;
+	}
+
+	if (TargetActor == LastEnemyBounceTarget.Get()
+		&& (bActiveDashFromEnemyBounce || DragonDashState == EDragonDashState::AerialDecision || GetWorldTimeSafe() < LastEnemyBounceIgnoreEndTime))
 	{
 		return false;
 	}
@@ -626,18 +698,44 @@ bool UDragonDashMovementComponent::ApplyEnemyDashDamage(
 	return DragonCharacter->ApplyCombatDamageToActor(TargetActor, DamageAmount, Hit);
 }
 
+bool UDragonDashMovementComponent::HasHitEnemyTargetInCurrentDash(AActor* TargetActor) const
+{
+	if (!TargetActor)
+	{
+		return false;
+	}
+
+	for (const TWeakObjectPtr<AActor>& HitTarget : EnemyTargetsHitThisDash)
+	{
+		if (HitTarget.Get() == TargetActor)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void UDragonDashMovementComponent::RememberEnemyTargetHit(AActor* TargetActor)
+{
+	if (!TargetActor || HasHitEnemyTargetInCurrentDash(TargetActor))
+	{
+		return;
+	}
+
+	EnemyTargetsHitThisDash.Add(TargetActor);
+}
+
 void UDragonDashMovementComponent::EnterEnemyBounce(
 	AActor* TargetActor,
 	const FHitResult& Hit,
 	UDragonDashEnemyTargetComponent* TargetComponent)
 {
 	const FDragonDashBounceTuning& Tuning = GetDashTuning();
-	FVector BounceDirection = QuantizeDashDirection(-ActiveDashDirection);
-	if (BounceDirection.IsNearlyZero())
-	{
-		BounceDirection = FVector::UpVector;
-	}
-
+	PendingEnemyBounceIncomingDirection = ResolveEnemyBounceIncomingDirection(TargetActor);
+	const FVector BounceDirection = BuildEnemyBounceDirectionFromInput();
+	const bool bEnteredEnemyFromAirDash = DragonDashState == EDragonDashState::AirDash
+		|| (DragonDashState == EDragonDashState::BounceDash && bActiveDashStartedInAir);
 	const bool bEnemyBounceAirborne = !IsMovingOnGround() || FMath::Abs(BounceDirection.Z) > KINDA_SMALL_NUMBER;
 	const float DashSpeed = ActiveDashSpeed;
 	const float DashDistance = ActiveDashDistance;
@@ -652,7 +750,7 @@ void UDragonDashMovementComponent::EnterEnemyBounce(
 	ActiveDashBounceCount = 0;
 	bActiveDashStartedInAir = bEnemyBounceAirborne;
 	bActiveDashFromEnemyBounce = true;
-	bPendingAerialDecisionAfterEnemyBounce = bEnemyBounceAirborne;
+	bPendingAerialDecisionAfterEnemyBounce = bEnteredEnemyFromAirDash && !IsMovingOnGround();
 	LastEnemyBounceTarget = TargetActor;
 	LastEnemyBounceIgnoreEndTime = GetWorldTimeSafe() + EnemyRepeatHitLockout;
 
@@ -670,8 +768,111 @@ void UDragonDashMovementComponent::EnterEnemyBounce(
 	SetDragonDashState(EDragonDashState::BounceDash);
 	if (!BeginEnemyHitStop(TargetActor, TargetComponent))
 	{
+		RefreshEnemyBounceDirectionFromInput();
 		Velocity = ActiveDashDirection * ActiveDashSpeed;
 	}
+}
+
+FVector UDragonDashMovementComponent::ResolveEnemyBounceIncomingDirection(AActor* TargetActor) const
+{
+	if (!ActiveDashDirection.IsNearlyZero())
+	{
+		return QuantizeDashDirection(ActiveDashDirection);
+	}
+
+	if (TargetActor && UpdatedComponent)
+	{
+		const FVector ToTarget = TargetActor->GetActorLocation() - UpdatedComponent->GetComponentLocation();
+		if (!ToTarget.IsNearlyZero())
+		{
+			return QuantizeDashDirection(ToTarget);
+		}
+	}
+
+	const float FacingSign = CharacterOwner ? FMath::Sign(CharacterOwner->GetActorForwardVector().X) : 1.0f;
+	return FVector(FMath::IsNearlyZero(FacingSign) ? 1.0f : FacingSign, 0.0f, 0.0f);
+}
+
+FVector UDragonDashMovementComponent::BuildEnemyBounceDirectionFromInput() const
+{
+	const FDragonDashBounceTuning& Tuning = GetDashTuning();
+	const FVector2D InputVector = GetTraversalInputVector();
+	const float InputHorizontalSign = FMath::Abs(InputVector.X) >= Tuning.DirectionInputDeadZone ? FMath::Sign(InputVector.X) : 0.0f;
+	const float InputVerticalSign = FMath::Abs(InputVector.Y) >= Tuning.DirectionInputDeadZone ? FMath::Sign(InputVector.Y) : 0.0f;
+	const float IncomingHorizontalSign = FMath::Abs(PendingEnemyBounceIncomingDirection.X) >= Tuning.DirectionInputDeadZone
+		? FMath::Sign(PendingEnemyBounceIncomingDirection.X)
+		: 0.0f;
+	const float IncomingVerticalSign = FMath::Abs(PendingEnemyBounceIncomingDirection.Z) >= Tuning.DirectionInputDeadZone
+		? FMath::Sign(PendingEnemyBounceIncomingDirection.Z)
+		: 0.0f;
+
+	if (!FMath::IsNearlyZero(IncomingHorizontalSign) && !FMath::IsNearlyZero(IncomingVerticalSign))
+	{
+		const float AwayHorizontalSign = -IncomingHorizontalSign;
+		if (IncomingVerticalSign > 0.0f)
+		{
+			return QuantizeDashDirection(FVector(AwayHorizontalSign, 0.0f, 1.0f));
+		}
+
+		if (InputVerticalSign < 0.0f)
+		{
+			return FVector(0.0f, 0.0f, -1.0f);
+		}
+
+		if (InputHorizontalSign * AwayHorizontalSign > 0.0f)
+		{
+			return QuantizeDashDirection(FVector(AwayHorizontalSign, 0.0f, 1.0f));
+		}
+
+		if (InputVerticalSign > 0.0f || InputHorizontalSign * IncomingHorizontalSign > 0.0f)
+		{
+			return FVector::UpVector;
+		}
+
+		return QuantizeDashDirection(FVector(AwayHorizontalSign, 0.0f, 1.0f));
+	}
+
+	if (!FMath::IsNearlyZero(IncomingHorizontalSign))
+	{
+		const float AwayHorizontalSign = -IncomingHorizontalSign;
+		if (InputVerticalSign < 0.0f)
+		{
+			return FVector(0.0f, 0.0f, -1.0f);
+		}
+
+		if (InputHorizontalSign * AwayHorizontalSign > 0.0f)
+		{
+			return QuantizeDashDirection(FVector(AwayHorizontalSign, 0.0f, 1.0f));
+		}
+
+		if (InputVerticalSign > 0.0f || InputHorizontalSign * IncomingHorizontalSign > 0.0f)
+		{
+			return FVector::UpVector;
+		}
+
+		return QuantizeDashDirection(FVector(AwayHorizontalSign, 0.0f, 1.0f));
+	}
+
+	if (!FMath::IsNearlyZero(IncomingVerticalSign))
+	{
+		const float BounceVerticalSign = -IncomingVerticalSign;
+		if (InputVerticalSign * IncomingVerticalSign > 0.0f && !FMath::IsNearlyZero(InputHorizontalSign))
+		{
+			return QuantizeDashDirection(FVector(InputHorizontalSign, 0.0f, BounceVerticalSign));
+		}
+
+		return FVector(0.0f, 0.0f, BounceVerticalSign);
+	}
+
+	return FVector::UpVector;
+}
+
+void UDragonDashMovementComponent::RefreshEnemyBounceDirectionFromInput()
+{
+	const FVector BounceDirection = BuildEnemyBounceDirectionFromInput();
+	ActiveDashDirection = BounceDirection.IsNearlyZero() ? FVector::UpVector : BounceDirection;
+	bActiveDashStartedInAir = !IsMovingOnGround() || FMath::Abs(ActiveDashDirection.Z) > KINDA_SMALL_NUMBER;
+	bPendingAerialDecisionAfterEnemyBounce = bPendingAerialDecisionAfterEnemyBounce && !IsMovingOnGround();
 }
 
 bool UDragonDashMovementComponent::BeginEnemyHitStop(AActor* TargetActor, const UDragonDashEnemyTargetComponent* TargetComponent)
@@ -698,15 +899,10 @@ bool UDragonDashMovementComponent::BeginEnemyHitStop(AActor* TargetActor, const 
 
 	bDashHitStopActive = true;
 	EnemyHitStopTarget = TargetActor;
-	PreEnemyHitStopDragonTimeDilation = CharacterOwner ? CharacterOwner->CustomTimeDilation : 1.0f;
 	PreEnemyHitStopTargetTimeDilation = TargetActor->CustomTimeDilation;
 
-	const float HitStopDilation = FMath::Clamp(Tuning.HitStopTimeDilation, 0.0f, 1.0f);
-	if (CharacterOwner)
-	{
-		CharacterOwner->CustomTimeDilation = HitStopDilation;
-	}
-	TargetActor->CustomTimeDilation = HitStopDilation;
+	ActiveEnemyHitStopTimeDilation = FMath::Clamp(Tuning.HitStopTimeDilation, 0.0f, 1.0f);
+	TargetActor->CustomTimeDilation = ActiveEnemyHitStopTimeDilation;
 	Velocity = FVector::ZeroVector;
 
 	World->GetTimerManager().SetTimer(
@@ -727,6 +923,7 @@ void UDragonDashMovementComponent::CompleteEnemyHitStop()
 		return;
 	}
 
+	RefreshEnemyBounceDirectionFromInput();
 	ActiveDashStartLocation = UpdatedComponent->GetComponentLocation();
 	ActiveDashStartTime = GetWorldTimeSafe();
 	Velocity = ActiveDashDirection * ActiveDashSpeed;
@@ -740,16 +937,13 @@ void UDragonDashMovementComponent::RestoreEnemyHitStopTimeDilation()
 		return;
 	}
 
-	if (CharacterOwner)
-	{
-		CharacterOwner->CustomTimeDilation = PreEnemyHitStopDragonTimeDilation;
-	}
 	if (EnemyHitStopTarget.IsValid())
 	{
 		EnemyHitStopTarget->CustomTimeDilation = PreEnemyHitStopTargetTimeDilation;
 	}
 
 	bDashHitStopActive = false;
+	ActiveEnemyHitStopTimeDilation = 1.0f;
 	EnemyHitStopTarget.Reset();
 }
 

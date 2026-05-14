@@ -99,6 +99,12 @@ Enemy actors:
 
 The creation order matters. More specific subclasses must be checked before their base classes. For example, `APlatformerEnemyElite` and `APlatformerEnemyRanged` are resolved before `APlatformerEnemyBase`, and `APlatformerTriggeredLift` is resolved before `APlatformerMovingPlatform`.
 
+## Conveyor Quick Settings
+
+`UPlatformerConveyorSettingsObject` treats conveyor movement as side-view X-axis motion. `Direction` resolves to `+X` or `-X`, `Speed` stores the absolute X speed, and pushing settings writes `LocalConveyorVelocity` as `(Speed * Sign, 0, 0)`. Runtime conveyor movement consumes only the X component so designers cannot accidentally push characters into depth Y or vertical Z through the quick settings vector.
+
+`APlatformerConveyor` uses `/CookieBrosPlatformer/Materials/MI_Conveyor` as the default mesh material. Its dynamic material parameter `Direction` is synced from `LocalConveyorVelocity.X`: `0.75` for left-to-right `+X`, `0.25` for right-to-left `-X`.
+
 ## Enemy Quick Settings
 
 `UPlatformerEnemySettingsObject` edits reusable enemy actor settings:
